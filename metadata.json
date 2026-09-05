@@ -1,0 +1,6 @@
+{
+  "name": "Website URL Crawler & SEO/Localization Validator",
+  "description": "Crawl any domain to discover all internal URLs, normalize links, detect languages, and perform comprehensive Sitemap coverage, language completeness, content localization, Header & Language Navigation, and AMP parity audits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
