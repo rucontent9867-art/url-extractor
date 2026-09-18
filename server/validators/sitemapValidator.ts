@@ -18,7 +18,14 @@ export function validateSitemap(session: StoredCrawlSession): SitemapValidationR
   // 1. Gather all English crawler URLs
   const englishCrawlerMap = new Map<
     string,
-    { url: string; canonicalPath: string; status: number; ignored: boolean; reason?: string }
+    {
+      url: string;
+      canonicalPath: string;
+      status: number;
+      ignored: boolean;
+      reason?: string;
+      discoveredFrom?: string[];
+    }
   >();
 
   let totalEnglishDiscovered = 0;
@@ -40,6 +47,7 @@ export function validateSitemap(session: StoredCrawlSession): SitemapValidationR
           status: item.status,
           ignored: true,
           reason: ignoreCheck.reason,
+          discoveredFrom: item.discoveredFrom,
         });
       } else {
         pagesChecked++;
@@ -48,6 +56,7 @@ export function validateSitemap(session: StoredCrawlSession): SitemapValidationR
           canonicalPath,
           status: item.status,
           ignored: false,
+          discoveredFrom: item.discoveredFrom,
         });
       }
     }
@@ -77,6 +86,7 @@ export function validateSitemap(session: StoredCrawlSession): SitemapValidationR
         inSitemap: englishSitemapUrls.has(normUrl),
         status: 'ignored',
         httpStatus: crawlerData.status,
+        discoveredFrom: crawlerData.discoveredFrom,
         ignoreReason: crawlerData.reason,
       });
       continue;
@@ -92,6 +102,7 @@ export function validateSitemap(session: StoredCrawlSession): SitemapValidationR
         inSitemap: true,
         status: 'correct',
         httpStatus: crawlerData.status,
+        discoveredFrom: crawlerData.discoveredFrom,
       });
     } else {
       missingUrls.push(normUrl);
@@ -102,6 +113,7 @@ export function validateSitemap(session: StoredCrawlSession): SitemapValidationR
         inSitemap: false,
         status: 'missing',
         httpStatus: crawlerData.status,
+        discoveredFrom: crawlerData.discoveredFrom,
       });
     }
   }

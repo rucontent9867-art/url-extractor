@@ -42,7 +42,11 @@ const INITIAL_STATS: CrawlStats = {
 };
 
 export default function App() {
-  const [urlInput, setUrlInput] = useState('https://kenya-eta.info/');
+  const [crawlMode, setCrawlMode] = useState<'domain' | 'url_list'>('url_list');
+  const [urlInput, setUrlInput] = useState('https://togo-evisa.com/');
+  const [urlListInput, setUrlListInput] = useState(
+    'https://togo-evisa.com/tourist-evisa/\nhttps://togo-evisa.com/business-visa/'
+  );
   const [settings, setSettings] = useState<CrawlSettings>(DEFAULT_SETTINGS);
   const [activeCrawlId, setActiveCrawlId] = useState<string | null>(null);
   const [stats, setStats] = useState<CrawlStats>(INITIAL_STATS);
@@ -158,12 +162,35 @@ export default function App() {
   };
 
   const handleStartCrawl = async () => {
-    if (!urlInput.trim()) return;
+    let payloadDomain = urlInput.trim();
+    let cleanUrls: string[] = [];
+
+    if (crawlMode === 'url_list') {
+      cleanUrls = urlListInput
+        .split(/[\r\n,]+/)
+        .map((u) => u.trim())
+        .filter((u) => u.length > 0 && (u.startsWith('http://') || u.startsWith('https://') || u.includes('.')));
+
+      if (cleanUrls.length === 0) {
+        setErrorMessage('Please provide at least one valid website URL in the list.');
+        return;
+      }
+      payloadDomain = cleanUrls[0];
+    } else {
+      if (!payloadDomain) {
+        setErrorMessage('Please enter a valid website domain.');
+        return;
+      }
+    }
 
     setErrorMessage('');
     setItems([]);
     setSelectedLanguage('all');
-    setLiveMessage('Starting crawl session...');
+    setLiveMessage(
+      crawlMode === 'url_list'
+        ? `Starting ultra-fast parallel check for ${cleanUrls.length} target URLs...`
+        : 'Starting crawl session...'
+    );
     setActiveNavTab('crawler');
 
     try {
@@ -171,8 +198,14 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          domain: urlInput.trim(),
-          settings,
+          domain: payloadDomain,
+          urls: crawlMode === 'url_list' ? cleanUrls : undefined,
+          crawlMode,
+          settings: {
+            ...settings,
+            crawlMode,
+            targetUrls: crawlMode === 'url_list' ? cleanUrls : undefined,
+          },
         }),
       });
 
@@ -265,6 +298,10 @@ export default function App() {
             <CrawlForm
               urlInput={urlInput}
               setUrlInput={setUrlInput}
+              urlListInput={urlListInput}
+              setUrlListInput={setUrlListInput}
+              crawlMode={crawlMode}
+              setCrawlMode={setCrawlMode}
               status={stats.status}
               settings={settings}
               setSettings={setSettings}

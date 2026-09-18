@@ -777,3 +777,142 @@ export function extractUrlLanguage(urlStr: string): {
     };
   }
 }
+
+export type UnicodeScript =
+  | 'Latin'
+  | 'Cyrillic'
+  | 'Arabic'
+  | 'Hebrew'
+  | 'Greek'
+  | 'Devanagari'
+  | 'Bengali'
+  | 'Thai'
+  | 'Hangul'
+  | 'Han'
+  | 'JapaneseKana'
+  | 'Mixed'
+  | 'Unknown';
+
+export interface ScriptAnalysis {
+  primaryScript: UnicodeScript;
+  scriptDistribution: Record<UnicodeScript, number>;
+  charCount: number;
+}
+
+/**
+ * Detects Unicode script distributions in text blocks to provide 100% deterministic
+ * signal for non-Latin writing systems.
+ */
+export function detectUnicodeScript(text: string): ScriptAnalysis {
+  const clean = (text || '').replace(/\s+/g, '');
+  if (!clean) {
+    return {
+      primaryScript: 'Unknown',
+      scriptDistribution: { Unknown: 0 } as any,
+      charCount: 0,
+    };
+  }
+
+  const counts: Record<UnicodeScript, number> = {
+    Latin: 0,
+    Cyrillic: 0,
+    Arabic: 0,
+    Hebrew: 0,
+    Greek: 0,
+    Devanagari: 0,
+    Bengali: 0,
+    Thai: 0,
+    Hangul: 0,
+    Han: 0,
+    JapaneseKana: 0,
+    Mixed: 0,
+    Unknown: 0,
+  };
+
+  let totalCounted = 0;
+
+  for (const ch of clean) {
+    const code = ch.codePointAt(0) || 0;
+
+    if ((code >= 0x0041 && code <= 0x005a) || (code >= 0x0061 && code <= 0x007a) || (code >= 0x00c0 && code <= 0x024f)) {
+      counts.Latin++;
+      totalCounted++;
+    } else if (code >= 0x0400 && code <= 0x04ff) {
+      counts.Cyrillic++;
+      totalCounted++;
+    } else if ((code >= 0x0600 && code <= 0x06ff) || (code >= 0x0750 && code <= 0x077f)) {
+      counts.Arabic++;
+      totalCounted++;
+    } else if (code >= 0x0590 && code <= 0x05ff) {
+      counts.Hebrew++;
+      totalCounted++;
+    } else if (code >= 0x0370 && code <= 0x03ff) {
+      counts.Greek++;
+      totalCounted++;
+    } else if (code >= 0x0900 && code <= 0x097f) {
+      counts.Devanagari++;
+      totalCounted++;
+    } else if (code >= 0x0980 && code <= 0x09ff) {
+      counts.Bengali++;
+      totalCounted++;
+    } else if (code >= 0x0e00 && code <= 0x0e7f) {
+      counts.Thai++;
+      totalCounted++;
+    } else if ((code >= 0xac00 && code <= 0xd7af) || (code >= 0x1100 && code <= 0x11ff)) {
+      counts.Hangul++;
+      totalCounted++;
+    } else if ((code >= 0x3040 && code <= 0x309f) || (code >= 0x30a0 && code <= 0x30ff)) {
+      counts.JapaneseKana++;
+      totalCounted++;
+    } else if (code >= 0x4e00 && code <= 0x9fff) {
+      counts.Han++;
+      totalCounted++;
+    }
+  }
+
+  if (totalCounted === 0) {
+    return {
+      primaryScript: 'Unknown',
+      scriptDistribution: counts,
+      charCount: 0,
+    };
+  }
+
+  let primaryScript: UnicodeScript = 'Unknown';
+  let maxCount = 0;
+
+  for (const [script, count] of Object.entries(counts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      primaryScript = script as UnicodeScript;
+    }
+  }
+
+  return {
+    primaryScript,
+    scriptDistribution: counts,
+    charCount: totalCounted,
+  };
+}
+
+/**
+ * Normalizes an hreflang attribute value (e.g., 'en-US' -> 'en', 'x-default' -> 'en', 'zh-CN' -> 'zh')
+ */
+export function normalizeHreflangCode(hreflang: string | null | undefined): {
+  code: string;
+  isDefault: boolean;
+  raw: string;
+} {
+  if (!hreflang) return { code: 'en', isDefault: true, raw: '' };
+  const clean = hreflang.trim().toLowerCase();
+  if (clean === 'x-default' || clean === 'default') {
+    return { code: 'en', isDefault: true, raw: clean };
+  }
+  const normCode = normalizeLanguageCode(clean);
+  return {
+    code: normCode,
+    isDefault: normCode === 'en',
+    raw: clean,
+  };
+}
+

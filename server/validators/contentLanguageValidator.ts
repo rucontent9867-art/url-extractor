@@ -11,6 +11,7 @@ import {
   getCanonicalLanguage,
   normalizeLanguageCode,
   extractUrlLanguage,
+  detectUnicodeScript,
 } from '../../src/utils/canonicalLanguage';
 import { hasIgnoredSlug } from '../crawler/urlNormalizer';
 import { getEffectiveIgnoredSlugs } from '../services/settingsStore';
@@ -82,46 +83,54 @@ export function detectTextContentLanguage(text: string): {
     return { code: 'unknown', name: 'Insufficient Text', confidence: 0, scores: [] };
   }
 
-  // Check distinctive non-Latin alphabets first
-  const cyrillicCount = (clean.match(/[\u0400-\u04FF]/g) || []).length;
-  const arabicCount = (clean.match(/[\u0600-\u06FF]/g) || []).length;
-  const cjkCount = (clean.match(/[\u4E00-\u9FFF]/g) || []).length;
-  const hangulCount = (clean.match(/[\uAC00-\uD7AF]/g) || []).length;
-  const hiraganaKatakanaCount = (clean.match(/[\u3040-\u30FF]/g) || []).length;
-  const greekCount = (clean.match(/[\u0370-\u03FF]/g) || []).length;
-  const hebrewCount = (clean.match(/[\u0590-\u05FF]/g) || []).length;
+  // 1. Deterministic Unicode Script Analysis
+  const scriptAnalysis = detectUnicodeScript(clean);
+  const totalChars = scriptAnalysis.charCount || clean.length;
 
-  const totalChars = clean.length;
-
-  if (cyrillicCount / totalChars > 0.2) {
+  if (scriptAnalysis.primaryScript === 'Cyrillic' && scriptAnalysis.scriptDistribution.Cyrillic / totalChars > 0.25) {
     if (/[іїє]/i.test(clean)) {
-      return { code: 'uk', name: 'Ukrainian', confidence: 96, scores: [{ code: 'uk', name: 'Ukrainian', score: 96 }] };
+      return { code: 'uk', name: 'Ukrainian', confidence: 98, scores: [{ code: 'uk', name: 'Ukrainian', score: 98 }] };
     }
     return { code: 'ru', name: 'Russian', confidence: 98, scores: [{ code: 'ru', name: 'Russian', score: 98 }] };
   }
 
-  if (arabicCount / totalChars > 0.2) {
+  if (scriptAnalysis.primaryScript === 'Arabic' && scriptAnalysis.scriptDistribution.Arabic / totalChars > 0.25) {
+    if (/[گچپژ]/i.test(clean)) {
+      return { code: 'fa', name: 'Persian', confidence: 98, scores: [{ code: 'fa', name: 'Persian', score: 98 }] };
+    }
     return { code: 'ar', name: 'Arabic', confidence: 98, scores: [{ code: 'ar', name: 'Arabic', score: 98 }] };
   }
 
-  if (hangulCount / totalChars > 0.2) {
-    return { code: 'ko', name: 'Korean', confidence: 98, scores: [{ code: 'ko', name: 'Korean', score: 98 }] };
+  if (scriptAnalysis.primaryScript === 'Hangul' && scriptAnalysis.scriptDistribution.Hangul / totalChars > 0.2) {
+    return { code: 'ko', name: 'Korean', confidence: 99, scores: [{ code: 'ko', name: 'Korean', score: 99 }] };
   }
 
-  if (hiraganaKatakanaCount / totalChars > 0.15) {
-    return { code: 'ja', name: 'Japanese', confidence: 98, scores: [{ code: 'ja', name: 'Japanese', score: 98 }] };
+  if (scriptAnalysis.primaryScript === 'JapaneseKana' || (scriptAnalysis.scriptDistribution.JapaneseKana && scriptAnalysis.scriptDistribution.JapaneseKana > 4)) {
+    return { code: 'ja', name: 'Japanese', confidence: 99, scores: [{ code: 'ja', name: 'Japanese', score: 99 }] };
   }
 
-  if (cjkCount / totalChars > 0.2) {
-    return { code: 'zh', name: 'Chinese', confidence: 96, scores: [{ code: 'zh', name: 'Chinese', score: 96 }] };
+  if (scriptAnalysis.primaryScript === 'Han' && scriptAnalysis.scriptDistribution.Han / totalChars > 0.2) {
+    return { code: 'zh', name: 'Chinese', confidence: 98, scores: [{ code: 'zh', name: 'Chinese', score: 98 }] };
   }
 
-  if (greekCount / totalChars > 0.2) {
-    return { code: 'el', name: 'Greek', confidence: 98, scores: [{ code: 'el', name: 'Greek', score: 98 }] };
+  if (scriptAnalysis.primaryScript === 'Greek' && scriptAnalysis.scriptDistribution.Greek / totalChars > 0.2) {
+    return { code: 'el', name: 'Greek', confidence: 99, scores: [{ code: 'el', name: 'Greek', score: 99 }] };
   }
 
-  if (hebrewCount / totalChars > 0.2) {
-    return { code: 'he', name: 'Hebrew', confidence: 98, scores: [{ code: 'he', name: 'Hebrew', score: 98 }] };
+  if (scriptAnalysis.primaryScript === 'Hebrew' && scriptAnalysis.scriptDistribution.Hebrew / totalChars > 0.2) {
+    return { code: 'he', name: 'Hebrew', confidence: 99, scores: [{ code: 'he', name: 'Hebrew', score: 99 }] };
+  }
+
+  if (scriptAnalysis.primaryScript === 'Thai' && scriptAnalysis.scriptDistribution.Thai / totalChars > 0.2) {
+    return { code: 'th', name: 'Thai', confidence: 99, scores: [{ code: 'th', name: 'Thai', score: 99 }] };
+  }
+
+  if (scriptAnalysis.primaryScript === 'Devanagari' && scriptAnalysis.scriptDistribution.Devanagari / totalChars > 0.2) {
+    return { code: 'hi', name: 'Hindi', confidence: 98, scores: [{ code: 'hi', name: 'Hindi', score: 98 }] };
+  }
+
+  if (scriptAnalysis.primaryScript === 'Bengali' && scriptAnalysis.scriptDistribution.Bengali / totalChars > 0.2) {
+    return { code: 'bn', name: 'Bengali', confidence: 98, scores: [{ code: 'bn', name: 'Bengali', score: 98 }] };
   }
 
   // Use n-gram language detector for Latin and other scripts

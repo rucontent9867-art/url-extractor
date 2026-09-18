@@ -6,6 +6,7 @@ import {
 } from '../../src/types';
 import { StoredCrawlSession } from '../services/crawlStore';
 import { buildLocalizedUrl, getCanonicalPath } from '../crawler/canonicalPath';
+import { detectUrlLanguage } from '../crawler/languageDetector';
 import { isAmpUrl } from '../../src/utils/canonicalLanguage';
 import { shouldIgnoreUrl } from '../services/domainSettingsStore';
 
@@ -59,6 +60,23 @@ export function validateLanguageCompleteness(session: StoredCrawlSession): Langu
 
     if (item.isEnglish || item.langCode === 'default' || item.langCode === 'en') {
       englishCanonicalPaths.set(canonical, item.normalizedUrl);
+
+      // Also register any hreflang declared translations from page metadata
+      if (item.hreflangMap) {
+        for (const [hreflangCode, href] of Object.entries(item.hreflangMap)) {
+          if (hreflangCode !== 'en' && hreflangCode !== 'default') {
+            const groupCode = hreflangCode;
+            if (!languageGroups.has(groupCode)) {
+              const langInfo = detectUrlLanguage(href);
+              languageGroups.set(groupCode, {
+                name: langInfo.name,
+                code: groupCode,
+                canonicalPaths: new Map(),
+              });
+            }
+          }
+        }
+      }
     } else {
       const code = item.langCode;
       if (!languageGroups.has(code)) {

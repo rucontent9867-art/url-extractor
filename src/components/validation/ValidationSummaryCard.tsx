@@ -11,6 +11,9 @@ import {
   Languages,
   Smartphone,
   Zap,
+  FileCheck2,
+  Eye,
+  MousePointerClick,
   ArrowRight,
 } from 'lucide-react';
 
@@ -18,7 +21,7 @@ interface ValidationSummaryCardProps {
   summary: ValidationSummary | null;
   isRunningAll: boolean;
   onRunAll: () => void;
-  onSelectTab: (tab: 'sitemap' | 'completeness' | 'content' | 'header' | 'amp') => void;
+  onSelectTab: (tab: 'sitemap' | 'completeness' | 'content' | 'header' | 'amp' | 'asset' | 'visual' | 'interaction') => void;
 }
 
 export const ValidationSummaryCard: React.FC<ValidationSummaryCardProps> = ({
@@ -39,7 +42,7 @@ export const ValidationSummaryCard: React.FC<ValidationSummaryCardProps> = ({
             </div>
             <h2 className="text-xl font-bold tracking-tight">Website Validation Suite</h2>
             <p className="text-xs text-slate-300 max-w-xl">
-              Execute comprehensive automated audits on your crawled dataset: Sitemap Coverage, Language Page Completeness, Text Content Verification, Header & Language Navigation, and AMP Parity.
+              Execute comprehensive automated audits on your crawled dataset: Sitemap Coverage, Language Completeness, Text Content, Navigation, AMP Parity, Asset & Link Health, Viewport Layouts, and Interactive Controls.
             </p>
           </div>
 
@@ -54,7 +57,7 @@ export const ValidationSummaryCard: React.FC<ValidationSummaryCardProps> = ({
             ) : (
               <Play className="h-4 w-4 fill-current" />
             )}
-            <span>{isRunningAll ? 'Running All Audits...' : 'Run All Validation Checks'}</span>
+            <span>{isRunningAll ? 'Running All Audits...' : 'Run All 8 Validation Checks'}</span>
           </button>
         </div>
       </div>
@@ -118,8 +121,8 @@ export const ValidationSummaryCard: React.FC<ValidationSummaryCardProps> = ({
         </button>
       </div>
 
-      {/* 5 Tool Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      {/* 8 Tool Summary Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Tool 1: Sitemap */}
         <div
           onClick={() => onSelectTab('sitemap')}
@@ -319,9 +322,124 @@ export const ValidationSummaryCard: React.FC<ValidationSummaryCardProps> = ({
             <p className="mt-2.5 text-[11px] text-slate-400 italic">Not evaluated</p>
           )}
         </div>
+
+        {/* Tool 6: Links, Assets & HTTP Health */}
+        <div
+          onClick={() => onSelectTab('asset')}
+          className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-xs transition-all cursor-pointer bg-slate-50/50 hover:bg-white group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-1.5">
+              <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
+              <span className="text-[11px] font-bold text-slate-900">6. Links, Assets & Health</span>
+            </div>
+            <ArrowRight className="h-3 w-3 text-slate-400 group-hover:text-slate-900 transition-colors" />
+          </div>
+
+          {summary.assetValidation ? (
+            <div className="mt-2.5 space-y-0.5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-mono text-slate-900">
+                  {summary.assetValidation.totalAssetsScanned}
+                </span>
+                <span
+                  className={`text-[10px] font-semibold ${
+                    summary.assetValidation.brokenCount === 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  {summary.assetValidation.brokenCount === 0
+                    ? '0 Broken'
+                    : `${summary.assetValidation.brokenCount} Broken`}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 truncate">
+                {summary.assetValidation.passedCount} healthy, {summary.assetValidation.missingAltCount} alt gaps
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2.5 text-[11px] text-slate-400 italic">Not evaluated</p>
+          )}
+        </div>
+
+        {/* Tool 7: Visual & Viewport */}
+        <div
+          onClick={() => onSelectTab('visual')}
+          className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-xs transition-all cursor-pointer bg-slate-50/50 hover:bg-white group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-1.5">
+              <Eye className="h-3.5 w-3.5 text-purple-600" />
+              <span className="text-[11px] font-bold text-slate-900">7. Visual / Viewport</span>
+            </div>
+            <ArrowRight className="h-3 w-3 text-slate-400 group-hover:text-slate-900 transition-colors" />
+          </div>
+
+          {summary.visualValidation ? (
+            <div className="mt-2.5 space-y-0.5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-mono text-slate-900">
+                  {summary.visualValidation.pagesChecked}
+                </span>
+                <span
+                  className={`text-[10px] font-semibold ${
+                    summary.visualValidation.totalErrors === 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  {summary.visualValidation.totalErrors === 0
+                    ? 'Layouts OK'
+                    : `${summary.visualValidation.totalErrors} Breaks`}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 truncate">
+                {summary.visualValidation.horizontalScrollIssues} scroll, {summary.visualValidation.textIssues} text clip
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2.5 text-[11px] text-slate-400 italic">Not evaluated</p>
+          )}
+        </div>
+
+        {/* Tool 8: Interaction & Console */}
+        <div
+          onClick={() => onSelectTab('interaction')}
+          className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-xs transition-all cursor-pointer bg-slate-50/50 hover:bg-white group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-1.5">
+              <MousePointerClick className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="text-[11px] font-bold text-slate-900">8. Interaction</span>
+            </div>
+            <ArrowRight className="h-3 w-3 text-slate-400 group-hover:text-slate-900 transition-colors" />
+          </div>
+
+          {summary.interactionValidation ? (
+            <div className="mt-2.5 space-y-0.5">
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-mono text-slate-900">
+                  {summary.interactionValidation.elementsTested}
+                </span>
+                <span
+                  className={`text-[10px] font-semibold ${
+                    summary.interactionValidation.errorCount === 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  {summary.interactionValidation.errorCount === 0
+                    ? '0 JS Err'
+                    : `${summary.interactionValidation.consoleErrorCount} JS Err`}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 truncate">
+                {summary.interactionValidation.passedCount} active, {summary.interactionValidation.noActionCount} dead buttons
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2.5 text-[11px] text-slate-400 italic">Not evaluated</p>
+          )}
+        </div>
       </div>
     </div>
   );
 };
+
 
 

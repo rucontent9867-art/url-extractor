@@ -1,6 +1,3 @@
-import axios, { AxiosRequestConfig } from 'axios';
-import http from 'http';
-import https from 'https';
 import {
   CrawlProgressMessage,
   CrawlSettings,
@@ -14,24 +11,11 @@ import { detectUrlLanguage } from './languageDetector';
 import { getCanonicalPath } from './canonicalPath';
 import { fetchAndParseRobotsTxt } from './robots';
 import { discoverAllSitemapUrls, DiscoveredSitemapUrl } from './sitemap';
-import { extractPageData } from './linkExtractor';
+import { parseHtmlPage } from './pageParser';
+import { fastFetchHtml } from './httpClient';
 import { crawlStore, StoredCrawlSession } from '../services/crawlStore';
 import { settingsStore } from '../services/settingsStore';
-
-// Persistent HTTP/HTTPS connection pooling agents for maximum crawl performance
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: 60,
-  maxFreeSockets: 30,
-  timeout: 45000,
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 60,
-  maxFreeSockets: 30,
-  timeout: 45000,
-});
+import { metricsTracker, logger } from '../services/metrics';
 
 function getCategoryForStatus(status: number): StatusCategory {
   if (status >= 200 && status < 300) return '2xx';
@@ -73,6 +57,7 @@ export class CrawlerSession {
   private pendingNewItems: CrawlUrlItem[] = [];
   private broadcastThrottleTimer: NodeJS.Timeout | null = null;
   private disallowedPaths: string[] = [];
+  private queueResolvers: Array<() => void> = [];
 
   constructor(crawlId: string, inputDomain: string, settings?: Partial<CrawlSettings>) {
     this.crawlId = crawlId;
@@ -98,18 +83,23 @@ export class CrawlerSession {
 
     this.ignoredSlugsSet = new Set(effectiveSlugs);
 
+    const crawlMode = settings?.crawlMode || (settings?.targetUrls && settings.targetUrls.length > 0 ? 'url_list' : 'domain');
+    const targetUrls = (settings?.targetUrls || []).map((u) => u.trim()).filter(Boolean);
+
     this.settings = {
-      maxPages: settings?.maxPages ?? 10000,
-      concurrency: Math.max(1, Math.min(30, settings?.concurrency ?? 15)),
-      requestTimeout: Math.max(3, Math.min(60, settings?.requestTimeout ?? 15)),
+      maxPages: settings?.maxPages ?? 100000,
+      concurrency: Math.max(1, Math.min(50, settings?.concurrency ?? 30)),
+      requestTimeout: Math.max(3, Math.min(60, settings?.requestTimeout ?? 12)),
       respectRobotsTxt: settings?.respectRobotsTxt ?? true,
       followRedirects: settings?.followRedirects ?? true,
       includeSubdomains: settings?.includeSubdomains ?? false,
       userAgent:
         settings?.userAgent ||
-        'Mozilla/5.0 (compatible; DomainCrawlerBot/1.0; +https://ai.studio)',
+        'Mozilla/5.0 (compatible; DomainCrawlerBot/2.0; +https://ai.studio; HighPerformance)',
       confidenceThreshold: settings?.confidenceThreshold ?? 90,
       ignoredSlugs: effectiveSlugs,
+      crawlMode,
+      targetUrls,
     };
 
     this.stats = {
@@ -117,6 +107,8 @@ export class CrawlerSession {
       domain: inputDomain,
       normalizedDomain: this.baseNormalizedUrl,
       status: 'idle',
+      crawlMode,
+      targetUrlsCount: targetUrls.length,
       pagesCrawled: 0,
       uniqueUrlsCount: 0,
       queueRemaining: 0,
@@ -204,6 +196,37 @@ export class CrawlerSession {
       this.broadcastThrottleTimer = null;
       this.broadcast(type);
     }, 150);
+  }
+
+  private notifyWorkers(): void {
+    while (this.queueResolvers.length > 0) {
+      const resolve = this.queueResolvers.shift();
+      if (resolve) {
+        try {
+          resolve();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  private waitForWork(timeoutMs: number = 350): Promise<void> {
+    return new Promise((resolve) => {
+      let timer: NodeJS.Timeout | null = null;
+      const onWake = () => {
+        if (timer) clearTimeout(timer);
+        resolve();
+      };
+
+      timer = setTimeout(() => {
+        const idx = this.queueResolvers.indexOf(onWake);
+        if (idx !== -1) this.queueResolvers.splice(idx, 1);
+        resolve();
+      }, timeoutMs);
+
+      this.queueResolvers.push(onWake);
+    });
   }
 
   /**
@@ -303,6 +326,8 @@ export class CrawlerSession {
     if (this.queue.length + this.visitedUrls.size < this.settings.maxPages * 2) {
       this.queue.push(validUrl);
       this.stats.queueRemaining = this.queue.length;
+      // Instant zero-delay wake-up for all active worker promises
+      this.notifyWorkers();
     }
 
     return true;
@@ -392,6 +417,36 @@ export class CrawlerSession {
 
     this.isAborted = false;
     this.abortController = new AbortController();
+
+    // Fast-path: Direct URL List Mode
+    if (this.settings.crawlMode === 'url_list' && this.settings.targetUrls && this.settings.targetUrls.length > 0) {
+      this.stats.status = 'crawling';
+      this.stats.startedAt = Date.now();
+      this.broadcast(
+        'init',
+        `Direct URL List mode: Processing ${this.settings.targetUrls.length} target URLs with parallel high-speed engine...`
+      );
+
+      for (const rawUrl of this.settings.targetUrls) {
+        if (!rawUrl || !rawUrl.trim()) continue;
+        const norm = normalizeUrl(rawUrl.trim(), this.origin, {
+          includeSubdomains: true,
+          ignoredSlugs: this.ignoredSlugsSet,
+        });
+        const urlToUse = norm ? norm.normalizedUrl : rawUrl.trim();
+        this.processCandidateUrl(urlToUse, urlToUse, 'Page Crawl', 0);
+      }
+
+      await this.runCrawlPool();
+
+      if (this.isAborted) {
+        this.finishCrawl('stopped');
+      } else {
+        this.finishCrawl('completed', `Direct validation complete: ${this.discoveredUrls.size} URLs analyzed.`);
+      }
+      return;
+    }
+
     this.stats.status = 'discovering_sitemaps';
     this.stats.startedAt = Date.now();
     this.broadcast('init', 'Starting robots.txt and sitemap discovery...');
@@ -479,7 +534,8 @@ export class CrawlerSession {
 
   private finishCrawl(status: CrawlStats['status'], message?: string): void {
     this.stats.status = status;
-    this.stats.completedAt = Date.now();
+    const now = Date.now();
+    this.stats.completedAt = now;
     this.stats.queueRemaining = 0;
     this.stats.currentUrl = '';
     this.stats.pagesCrawled = this.visitedUrls.size;
@@ -487,6 +543,27 @@ export class CrawlerSession {
     this.stats.duplicatesRemoved = this.duplicateUrlsSet.size;
     this.stats.assetsIgnored = this.assetUrlsSet.size;
     this.stats.externalUrlsIgnored = this.externalUrlsSet.size;
+
+    const startedAt = this.stats.startedAt || now;
+    const durationMs = Math.max(1, now - startedAt);
+    const pagesPerSecond = Number(((this.stats.pagesCrawled / (durationMs / 1000))).toFixed(2));
+    this.stats.durationMs = durationMs;
+    this.stats.pagesPerSecond = pagesPerSecond;
+
+    // Record metrics
+    metricsTracker.recordCrawl({
+      crawlId: this.crawlId,
+      totalTimeMs: durationMs,
+      pagesDiscovered: this.discoveredUrls.size,
+      pagesCrawled: this.stats.pagesCrawled,
+      duplicatesRemoved: this.stats.duplicatesRemoved,
+      assetsSkipped: this.stats.assetsIgnored,
+      externalUrlsSkipped: this.stats.externalUrlsIgnored,
+      failedRequests: this.stats.failedRequests,
+      retryCount: 0,
+      pagesPerSecond,
+      avgResponseTimeMs: 0,
+    });
 
     if (this.broadcastThrottleTimer) {
       clearTimeout(this.broadcastThrottleTimer);
@@ -502,16 +579,17 @@ export class CrawlerSession {
 
   /**
    * Runs concurrent worker promises drawing from the crawl queue.
+   * Uses reactive zero-delay resolution so workers immediately pick up newly discovered links.
    */
   private async runCrawlPool(): Promise<void> {
-    const activeWorkers = new Set<Promise<void>>();
+    let inFlightCount = 0;
 
     const worker = async (): Promise<void> => {
       while (!this.isAborted && this.stats.pagesCrawled < this.settings.maxPages) {
         if (this.queue.length === 0) {
-          if (activeWorkers.size > 1) {
-            // Idle wait briefly to see if another worker discovers new links
-            await new Promise((resolve) => setTimeout(resolve, 80));
+          if (inFlightCount > 0) {
+            // Wait reactively for another active worker to enqueue newly discovered links
+            await this.waitForWork(400);
             if (this.queue.length > 0) continue;
           }
           break;
@@ -529,7 +607,13 @@ export class CrawlerSession {
         this.stats.currentUrl = nextUrl;
         this.scheduleThrottledBroadcast('page_crawled');
 
-        await this.crawlSinglePage(nextUrl);
+        inFlightCount++;
+        try {
+          await this.crawlSinglePage(nextUrl);
+        } finally {
+          inFlightCount--;
+          this.notifyWorkers();
+        }
       }
     };
 
@@ -537,15 +621,11 @@ export class CrawlerSession {
     const promises: Promise<void>[] = [];
 
     for (let i = 0; i < targetConcurrency; i++) {
-      const p = (async () => {
-        await worker();
-      })();
-      activeWorkers.add(p);
-      promises.push(p);
-      p.finally(() => activeWorkers.delete(p));
+      promises.push(worker());
     }
 
     await Promise.all(promises);
+    this.notifyWorkers();
   }
 
   /**
@@ -566,68 +646,53 @@ export class CrawlerSession {
     }
 
     try {
-      const config: AxiosRequestConfig = {
-        httpAgent,
-        httpsAgent,
-        timeout: this.settings.requestTimeout * 1000,
-        signal: this.abortController.signal,
-        headers: {
-          'User-Agent': this.settings.userAgent,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-          Connection: 'keep-alive',
-        },
-        maxRedirects: this.settings.followRedirects ? 5 : 0,
-        validateStatus: () => true,
-        responseType: 'text',
-      };
+      const dynamicSelectors = this.settings.dynamicSelectors || settingsStore.getDynamicSelectors();
+      const fetchResult = await fastFetchHtml(targetUrl, {
+        userAgent: this.settings.userAgent,
+        timeoutSeconds: this.settings.requestTimeout,
+        followRedirects: this.settings.followRedirects,
+        abortSignal: this.abortController.signal,
+        maxRetries: 1,
+      });
 
-      const response = await axios.get(targetUrl, config);
-      const statusCode = response.status;
-
+      const statusCode = fetchResult.status;
       let currentItem = this.discoveredUrls.get(targetUrl);
       if (currentItem) {
         currentItem.status = statusCode;
         currentItem.httpStatus = statusCode;
         currentItem.statusCategory = getCategoryForStatus(statusCode);
-        currentItem.crawlStatus = statusCode >= 400 ? 'http_error' : 'success';
+        currentItem.crawlStatus = statusCode >= 400 || statusCode === 0 ? 'http_error' : 'success';
+        currentItem.responseTimeMs = fetchResult.responseTimeMs;
+        currentItem.contentType = fetchResult.contentType;
       }
 
-      // Check if redirected to a different URL
-      const finalUrl = response.request?.res?.responseUrl;
-      if (finalUrl && typeof finalUrl === 'string' && finalUrl !== targetUrl) {
-        const normFinal = normalizeUrl(finalUrl, this.origin, {
+      // Handle redirect
+      if (fetchResult.finalUrl && fetchResult.finalUrl !== targetUrl) {
+        const normFinal = normalizeUrl(fetchResult.finalUrl, this.origin, {
           includeSubdomains: this.settings.includeSubdomains,
           ignoredSlugs: this.ignoredSlugsSet,
         });
         if (normFinal && !normFinal.isAsset && !normFinal.isExternal) {
-          // Register final URL as known and visited so it's not crawled redundantly
           this.knownUrls.add(normFinal.normalizedUrl);
           this.visitedUrls.add(normFinal.normalizedUrl);
         }
       }
 
-      if (statusCode >= 400) {
+      if (statusCode >= 400 || !fetchResult.ok) {
         this.stats.failedRequests++;
         if (currentItem) {
-          currentItem.status = statusCode;
-          currentItem.httpStatus = statusCode;
-          currentItem.statusCategory = statusCode >= 500 ? '5xx' : '4xx';
-          currentItem.crawlStatus = 'http_error';
-          currentItem.error = `HTTP ${statusCode}${statusCode === 404 ? ' Not Found' : ' Error'}`;
+          currentItem.status = statusCode || 0;
+          currentItem.httpStatus = statusCode || 0;
+          currentItem.statusCategory = statusCode >= 500 ? '5xx' : statusCode >= 400 ? '4xx' : 'failed';
+          currentItem.crawlStatus = statusCode >= 400 ? 'http_error' : 'connection_failed';
+          currentItem.error = fetchResult.error || `HTTP ${statusCode}${statusCode === 404 ? ' Not Found' : ' Error'}`;
         }
         this.scheduleThrottledBroadcast('page_failed');
         return;
       }
 
-      const contentTypeHeader = response.headers['content-type'];
-      const contentType = typeof contentTypeHeader === 'string' ? contentTypeHeader.toLowerCase() : '';
-      if (currentItem) {
-        currentItem.contentType = contentType;
-      }
-
-      // If server returned a binary asset instead of HTML, record asset and remove from unique pages
-      if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+      // Check non-HTML Content-Type
+      if (!fetchResult.isHtml && fetchResult.contentType) {
         if (!this.assetUrlsSet.has(targetUrl)) {
           this.assetUrlsSet.add(targetUrl);
           this.stats.assetsIgnored = this.assetUrlsSet.size;
@@ -639,26 +704,30 @@ export class CrawlerSession {
         return;
       }
 
-      const html = response.data;
+      const html = fetchResult.body;
       if (!html || typeof html !== 'string') return;
 
-      // Extract static page data excluding dynamic content
-      const dynamicSelectors = this.settings.dynamicSelectors || settingsStore.getDynamicSelectors();
-      const extracted = extractPageData(html, { dynamicSelectors });
+      // Single-pass parse of metadata, static content, and hreflangs
+      const parsed = parseHtmlPage(html, {
+        baseUrl: targetUrl,
+        dynamicSelectors,
+      });
 
       if (currentItem) {
-        currentItem.title = extracted.title;
-        currentItem.textContent = extracted.textContent;
-        currentItem.staticText = extracted.staticText;
-        currentItem.staticCharsAnalyzed = extracted.staticCharsAnalyzed;
-        currentItem.dynamicCharsIgnored = extracted.dynamicCharsIgnored;
-        currentItem.staticBlocks = extracted.staticBlocks;
-        currentItem.amphtmlUrl = extracted.amphtmlUrl;
+        currentItem.title = parsed.title;
+        currentItem.textContent = parsed.staticText;
+        currentItem.staticText = parsed.staticText;
+        currentItem.staticCharsAnalyzed = parsed.staticCharsAnalyzed;
+        currentItem.dynamicCharsIgnored = parsed.dynamicCharsIgnored;
+        currentItem.staticBlocks = parsed.staticBlocks;
+        currentItem.amphtmlUrl = parsed.amphtmlUrl;
+        currentItem.canonicalUrl = parsed.canonicalUrl;
+        currentItem.hreflangMap = parsed.hreflangMap;
       }
 
       // Process asset links discovered on the page
-      if (extracted.assetLinks && extracted.assetLinks.length > 0) {
-        for (const assetHref of extracted.assetLinks) {
+      if (parsed.assetLinks && parsed.assetLinks.length > 0) {
+        for (const assetHref of parsed.assetLinks) {
           const normAsset = normalizeUrl(assetHref, targetUrl, {
             includeSubdomains: this.settings.includeSubdomains,
             ignoredSlugs: this.ignoredSlugsSet,
@@ -672,17 +741,19 @@ export class CrawlerSession {
         }
       }
 
-      // Process all HTML hyperlinks and alternates
-      const allExtractedHrefs = [
-        ...extracted.links,
-        ...extracted.alternateLinks,
-        ...(extracted.canonicalUrl ? [extracted.canonicalUrl] : []),
-      ];
+      // Process all HTML hyperlinks, alternates, and canonical (skip deep child crawling in url_list mode)
+      if (this.settings.crawlMode !== 'url_list') {
+        const allExtractedHrefs = [
+          ...parsed.links,
+          ...parsed.alternateLinks,
+          ...(parsed.canonicalUrl ? [parsed.canonicalUrl] : []),
+        ];
 
-      const childDepth = (currentItem?.depth || 0) + 1;
-      for (const rawHref of allExtractedHrefs) {
-        if (this.isAborted) break;
-        this.processCandidateUrl(rawHref, targetUrl, 'Page Crawl', childDepth);
+        const childDepth = (currentItem?.depth || 0) + 1;
+        for (const rawHref of allExtractedHrefs) {
+          if (this.isAborted) break;
+          this.processCandidateUrl(rawHref, targetUrl, 'Page Crawl', childDepth);
+        }
       }
     } catch (err: any) {
       if (this.isAborted) return;

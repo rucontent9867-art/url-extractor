@@ -18,6 +18,9 @@ export async function fetchDomainSettings(domain: string): Promise<DomainSetting
         contentLanguage: { ignoredSlugs: [], ignoredExactUrls: [], ignoredPatterns: [] },
         headerLanguage: { ignoredSlugs: [], ignoredExactUrls: [], ignoredPatterns: [] },
         amp: { ignoredSlugs: [], ignoredExactUrls: [], ignoredPatterns: [] },
+        asset: { ignoredSlugs: [], ignoredExactUrls: [], ignoredPatterns: [] },
+        visual: { ignoredSlugs: [], ignoredExactUrls: [], ignoredPatterns: [] },
+        interaction: { ignoredSlugs: [], ignoredExactUrls: [], ignoredPatterns: [] },
       },
       updatedAt: Date.now(),
     };

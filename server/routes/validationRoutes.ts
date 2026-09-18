@@ -110,11 +110,68 @@ validationRouter.post('/validation/amp/:crawlId', async (req, res) => {
   }
 });
 
+// Validate Assets, HTTP & Link Health (Tool 6)
+validationRouter.post('/validation/asset/:crawlId', async (req, res) => {
+  try {
+    const { crawlId } = req.params;
+    const options = req.body || {};
+
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      return res.status(404).json({ error: 'Crawl session not found. Please run a crawl first.' });
+    }
+
+    const result = await validationService.validateAssetOnly(crawlId, options);
+    return res.json({ success: true, crawlId, assetValidation: result });
+  } catch (err: any) {
+    console.error('Asset validation error:', err);
+    return res.status(500).json({ error: err.message || 'Asset validation failed' });
+  }
+});
+
+// Validate Visual, Responsive & Viewport (Tool 7)
+validationRouter.post('/validation/visual/:crawlId', async (req, res) => {
+  try {
+    const { crawlId } = req.params;
+    const options = req.body || {};
+
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      return res.status(404).json({ error: 'Crawl session not found. Please run a crawl first.' });
+    }
+
+    const result = await validationService.validateVisualOnly(crawlId, options);
+    return res.json({ success: true, crawlId, visualValidation: result });
+  } catch (err: any) {
+    console.error('Visual validation error:', err);
+    return res.status(500).json({ error: err.message || 'Visual validation failed' });
+  }
+});
+
+// Validate Interaction & Console Monitoring (Tool 8)
+validationRouter.post('/validation/interaction/:crawlId', async (req, res) => {
+  try {
+    const { crawlId } = req.params;
+    const options = req.body || {};
+
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      return res.status(404).json({ error: 'Crawl session not found. Please run a crawl first.' });
+    }
+
+    const result = await validationService.validateInteractionOnly(crawlId, options);
+    return res.json({ success: true, crawlId, interactionValidation: result });
+  } catch (err: any) {
+    console.error('Interaction validation error:', err);
+    return res.status(500).json({ error: err.message || 'Interaction validation failed' });
+  }
+});
+
 // Run All Validations
 validationRouter.post('/validation/all/:crawlId', async (req, res) => {
   try {
     const { crawlId } = req.params;
-    const { threshold, maxPages, ampOptions } = req.body || {};
+    const { threshold, maxPages, ampOptions, assetOptions, visualOptions, interactionOptions } = req.body || {};
 
     const session = crawlStore.getSession(crawlId);
     if (!session) {
@@ -130,7 +187,10 @@ validationRouter.post('/validation/all/:crawlId', async (req, res) => {
       crawlId,
       confidenceThreshold,
       headerOptions,
-      ampOptions
+      ampOptions,
+      assetOptions,
+      visualOptions,
+      interactionOptions
     );
     return res.json({ success: true, crawlId, summary });
   } catch (err: any) {

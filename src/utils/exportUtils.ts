@@ -4,6 +4,10 @@ import {
   LanguageCompletenessItem,
   SitemapValidationItem,
   AmpValidationItem,
+  AssetValidationItem,
+  AssetRecord,
+  VisualValidationItem,
+  InteractionValidationItem,
 } from '../types';
 
 /**
@@ -320,4 +324,197 @@ export function downloadAmpValidationCsv(
   const csvContent = [headers.join(','), ...rows].join('\n');
   triggerFileDownload(csvContent, filename, 'text/csv;charset=utf-8');
 }
+
+/**
+ * Downloads Links, Assets & HTTP Health Validation report as CSV
+ */
+export function downloadAssetValidationCsv(
+  items: AssetRecord[],
+  filename: string = 'links-assets-http-health-report.csv'
+): void {
+  const headers = [
+    'Resource URL',
+    'Primary Page URL',
+    'Found On Pages Count',
+    'Found On Pages List',
+    'Resource Type',
+    'Element Type',
+    'HTTP Status',
+    'Status',
+    'Skip Reason',
+    'Alt Status',
+    'Alt Text',
+    'Alt Category',
+    'Redirect Issue',
+    'Redirect Hops',
+    'Final URL',
+    'Redirect Chain',
+    'Load Time (ms)',
+    'Error Details',
+  ];
+
+  const rows = items.map((item) => {
+    const assetUrl = `"${(item.url || '').replace(/"/g, '""')}"`;
+    const pageUrl = `"${(item.primarySourcePage || '').replace(/"/g, '""')}"`;
+    const foundOnPages = item.foundOnPages || item.sourcePages || (item.primarySourcePage ? [item.primarySourcePage] : []);
+    const foundOnPagesCount = foundOnPages.length;
+    const foundOnPagesList = `"${foundOnPages.join('; ').replace(/"/g, '""')}"`;
+    const assetType = `"${item.assetType}"`;
+    const elemType = `"${item.elementType || ''}"`;
+    const httpStatus = item.status === 'skipped' ? 'SKIPPED' : item.statusCode !== undefined ? item.statusCode : 'Failed';
+    const status = `"${item.statusLabel || item.status}"`;
+    const skipReason = `"${(item.skipReason || '').replace(/"/g, '""')}"`;
+    const altStatus = `"${item.altStatus || ''}"`;
+    const altText = `"${(item.alt || '').replace(/"/g, '""')}"`;
+    const altCat = `"${item.altCategory || ''}"`;
+    const redirectIssue = `"${item.redirectIssue || 'NONE'}"`;
+    const redirectHops = item.redirectChainLength || (item.redirectChain ? item.redirectChain.length : 0);
+    const finalUrl = `"${(item.finalUrl || '').replace(/"/g, '""')}"`;
+    const redirectChainStr = `"${(item.redirectChain || []).map((s) => `[${s.status}] ${s.url}`).join(' -> ').replace(/"/g, '""')}"`;
+    const loadTime = item.responseTimeMs !== undefined ? item.responseTimeMs : '';
+    const errorDetails = `"${(item.error || item.details || '').replace(/"/g, '""')}"`;
+
+    return [
+      assetUrl,
+      pageUrl,
+      foundOnPagesCount,
+      foundOnPagesList,
+      assetType,
+      elemType,
+      httpStatus,
+      status,
+      skipReason,
+      altStatus,
+      altText,
+      altCat,
+      redirectIssue,
+      redirectHops,
+      finalUrl,
+      redirectChainStr,
+      loadTime,
+      errorDetails,
+    ].join(',');
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  triggerFileDownload(csvContent, filename, 'text/csv;charset=utf-8');
+}
+
+/**
+ * Downloads Visual & Viewport Validation report as CSV
+ */
+export function downloadVisualValidationCsv(
+  items: VisualValidationItem[],
+  filename: string = 'visual-validation-report.csv'
+): void {
+  const headers = [
+    'Page URL',
+    'Viewport Name',
+    'Viewport Dimensions',
+    'Issue Type',
+    'Element Selector',
+    'Element Tag',
+    'Text Sample',
+    'Bounding Box (L,T,W,H)',
+    'CSS Reason',
+    'Status',
+    'Priority',
+    'Details',
+  ];
+
+  const rows = items.map((item) => {
+    const pageUrl = `"${(item.pageUrl || '').replace(/"/g, '""')}"`;
+    const vpName = `"${item.viewport.name}"`;
+    const vpDim = `"${item.viewport.width}x${item.viewport.height}"`;
+    const issueType = `"${item.issueType}"`;
+    const selector = `"${(item.elementSelector || '').replace(/"/g, '""')}"`;
+    const tag = `"${item.elementTag || ''}"`;
+    const textSample = `"${(item.textSample || '').replace(/"/g, '""')}"`;
+    const bbox = item.boundingBox
+      ? `"[${item.boundingBox.left}, ${item.boundingBox.top}, ${item.boundingBox.width}x${item.boundingBox.height}]"`
+      : '""';
+    const cssReason = `"${(item.cssReason || '').replace(/"/g, '""')}"`;
+    const status = `"${item.statusLabel || item.status}"`;
+    const priority = `"${item.priority}"`;
+    const details = `"${(item.details || '').replace(/"/g, '""')}"`;
+
+    return [
+      pageUrl,
+      vpName,
+      vpDim,
+      issueType,
+      selector,
+      tag,
+      textSample,
+      bbox,
+      cssReason,
+      status,
+      priority,
+      details,
+    ].join(',');
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  triggerFileDownload(csvContent, filename, 'text/csv;charset=utf-8');
+}
+
+/**
+ * Downloads Interaction & Console Validation report as CSV
+ */
+export function downloadInteractionValidationCsv(
+  items: InteractionValidationItem[],
+  filename: string = 'interaction-validation-report.csv'
+): void {
+  const headers = [
+    'Page URL',
+    'Element Selector',
+    'Element Type',
+    'Element Text',
+    'Action',
+    'Result',
+    'Result Summary',
+    'DOM Changed',
+    'Visibility Changed',
+    'Console Errors Count',
+    'Network Errors Count',
+    'Status',
+    'Priority',
+  ];
+
+  const rows = items.map((item) => {
+    const pageUrl = `"${(item.pageUrl || '').replace(/"/g, '""')}"`;
+    const selector = `"${(item.elementSelector || '').replace(/"/g, '""')}"`;
+    const elType = `"${item.elementType}"`;
+    const text = `"${(item.elementText || '').replace(/"/g, '""')}"`;
+    const action = `"${item.action}"`;
+    const result = `"${item.result}"`;
+    const summary = `"${(item.resultSummary || '').replace(/"/g, '""')}"`;
+    const domChanged = item.domChanged ? 'Yes' : 'No';
+    const visChanged = item.visibilityChanged ? 'Yes' : 'No';
+    const consoleCount = item.consoleErrors?.length || 0;
+    const netCount = item.networkErrors?.length || 0;
+    const status = `"${item.statusLabel || item.status}"`;
+    const priority = `"${item.priority}"`;
+
+    return [
+      pageUrl,
+      selector,
+      elType,
+      text,
+      action,
+      result,
+      summary,
+      domChanged,
+      visChanged,
+      consoleCount,
+      netCount,
+      status,
+      priority,
+    ].join(',');
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  triggerFileDownload(csvContent, filename, 'text/csv;charset=utf-8');
+}
+
 

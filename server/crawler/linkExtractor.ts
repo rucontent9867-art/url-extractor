@@ -152,7 +152,7 @@ export function extractPageData(html: string, options?: ExtractOptions): Extract
     }
   );
 
-  // 8. Extract meaningful static text blocks
+  // 8. Extract meaningful static text blocks (prioritizing main content over navigation/footer boilerplate)
   const staticBlocks: StaticContentBlock[] = [];
 
   // Meta block
@@ -164,7 +164,7 @@ export function extractPageData(html: string, options?: ExtractOptions): Extract
   }
 
   // Headings
-  $('h1, h2, h3').each((_, el) => {
+  $('h1, h2, h3, h4').each((_, el) => {
     const t = $(el).text().replace(/\s+/g, ' ').trim();
     if (t.length >= 3 && !t.startsWith('{') && !t.includes('function(')) {
       staticBlocks.push({ type: 'heading', text: t });
@@ -172,43 +172,34 @@ export function extractPageData(html: string, options?: ExtractOptions): Extract
   });
 
   // Paragraphs & list items
-  $('p, li').each((_, el) => {
-    const t = $(el).text().replace(/\s+/g, ' ').trim();
-    if (t.length >= 4 && !t.startsWith('{') && !t.includes('function(')) {
-      staticBlocks.push({ type: 'paragraph', text: t });
-    }
-  });
-
-  // Navigation text
-  $('nav, header nav, .nav, .navigation, .menu').each((_, el) => {
-    const t = $(el).text().replace(/\s+/g, ' ').trim();
-    if (t.length >= 3) {
-      staticBlocks.push({ type: 'navigation', text: t });
-    }
-  });
-
-  // Footer text
-  $('footer, .footer').each((_, el) => {
-    const t = $(el).text().replace(/\s+/g, ' ').trim();
-    if (t.length >= 4) {
-      staticBlocks.push({ type: 'footer', text: t });
+  $('p, li, article, main, section').each((_, el) => {
+    // Exclude if inside nav or footer or aside to prevent boilerplate skewing language detection
+    if ($(el).parents('nav, footer, aside, .footer, .header, .nav').length === 0) {
+      const t = $(el).text().replace(/\s+/g, ' ').trim();
+      if (t.length >= 4 && !t.startsWith('{') && !t.includes('function(')) {
+        staticBlocks.push({ type: 'paragraph', text: t });
+      }
     }
   });
 
   // Static buttons & labels
   $('button, label').each((_, el) => {
-    const t = $(el).text().replace(/\s+/g, ' ').trim();
-    if (t.length >= 2 && t.length <= 80) {
-      staticBlocks.push({ type: 'paragraph', text: t });
+    if ($(el).parents('nav, footer, aside, .footer, .header').length === 0) {
+      const t = $(el).text().replace(/\s+/g, ' ').trim();
+      if (t.length >= 2 && t.length <= 80) {
+        staticBlocks.push({ type: 'paragraph', text: t });
+      }
     }
   });
 
   // Collect text pieces
   const staticTextPieces = staticBlocks.map((b) => b.text);
 
-  // If no structured blocks were found, fallback to remaining body text
+  // If no structured blocks were found, fallback to remaining body text (excluding nav/footer)
   if (staticTextPieces.length <= 1) {
-    const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+    const bodyClone = $('body').clone();
+    bodyClone.find('nav, footer, aside, header, .footer, .header, .nav').remove();
+    const bodyText = bodyClone.text().replace(/\s+/g, ' ').trim();
     if (bodyText) {
       staticTextPieces.push(bodyText);
     }

@@ -72,7 +72,12 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
                 {stats.normalizedDomain}
                 <ExternalLink className="h-3 w-3" />
               </a>
-              {durationMs > 0 && <span className="ml-2 font-sans font-medium">• Elapsed: {formatDuration(durationMs)}</span>}
+              {durationMs > 0 && (
+                <span className="ml-2 font-sans font-medium">
+                  • Elapsed: {formatDuration(durationMs)}
+                  {stats.pagesPerSecond ? ` (${stats.pagesPerSecond} pages/sec)` : ''}
+                </span>
+              )}
             </p>
           </div>
         </div>

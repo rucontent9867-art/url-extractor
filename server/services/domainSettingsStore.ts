@@ -8,6 +8,9 @@ import {
   DomainGlobalExclusions,
   DomainSettings,
   IgnoreCheckResult,
+  Tool6Settings,
+  ExternalUrlValidationMode,
+  AssetType,
 } from '../../src/types';
 import { hasIgnoredSlug } from '../crawler/urlNormalizer';
 import { settingsStore } from './settingsStore';
@@ -15,12 +18,41 @@ import { settingsStore } from './settingsStore';
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DOMAIN_SETTINGS_FILE = path.join(DATA_DIR, 'domain-settings.json');
 
+export const DEFAULT_SOCIAL_DOMAINS: string[] = [
+  'facebook.com',
+  'instagram.com',
+  'x.com',
+  'twitter.com',
+  'linkedin.com',
+  'youtube.com',
+  'tiktok.com',
+  'reddit.com',
+  'pinterest.com',
+  'whatsapp.com',
+  'telegram.org',
+];
+
+export function createDefaultTool6Settings(): Tool6Settings {
+  return {
+    externalUrlValidation: 'none',
+    selectedExternalDomains: [],
+    enableSocialExclusions: true,
+    socialDomains: [...DEFAULT_SOCIAL_DOMAINS],
+    timeoutSec: 12,
+    maxRedirectsThreshold: 2,
+    ignoredAssetTypes: [],
+  };
+}
+
 const VALID_TOOLS: ValidationToolId[] = [
   'sitemap',
   'languageCompleteness',
   'contentLanguage',
   'headerLanguage',
   'amp',
+  'asset',
+  'visual',
+  'interaction',
 ];
 
 /**
@@ -170,7 +202,11 @@ function createDefaultDomainSettings(domain: string, initialGlobalSlugs?: string
       contentLanguage: createEmptyToolExclusions(),
       headerLanguage: createEmptyToolExclusions(),
       amp: createEmptyToolExclusions(),
+      asset: createEmptyToolExclusions(),
+      visual: createEmptyToolExclusions(),
+      interaction: createEmptyToolExclusions(),
     },
+    tool6: createDefaultTool6Settings(),
     updatedAt: Date.now(),
   };
 }
@@ -256,6 +292,9 @@ class DomainSettingsStore {
       contentLanguage: createEmptyToolExclusions(),
       headerLanguage: createEmptyToolExclusions(),
       amp: createEmptyToolExclusions(),
+      asset: createEmptyToolExclusions(),
+      visual: createEmptyToolExclusions(),
+      interaction: createEmptyToolExclusions(),
     };
 
     for (const tool of VALID_TOOLS) {
@@ -275,6 +314,24 @@ class DomainSettingsStore {
       }
     }
 
+    const tool6Data = data?.tool6;
+    const tool6: Tool6Settings = {
+      externalUrlValidation:
+        tool6Data?.externalUrlValidation === 'all' || tool6Data?.externalUrlValidation === 'selected_domains'
+          ? tool6Data.externalUrlValidation
+          : 'none',
+      selectedExternalDomains: Array.isArray(tool6Data?.selectedExternalDomains)
+        ? Array.from(new Set(tool6Data.selectedExternalDomains.map((d: any) => String(d).trim().toLowerCase()).filter(Boolean)))
+        : [],
+      enableSocialExclusions: tool6Data?.enableSocialExclusions !== undefined ? Boolean(tool6Data.enableSocialExclusions) : true,
+      socialDomains: Array.isArray(tool6Data?.socialDomains) && tool6Data.socialDomains.length > 0
+        ? Array.from(new Set(tool6Data.socialDomains.map((d: any) => String(d).trim().toLowerCase()).filter(Boolean)))
+        : [...DEFAULT_SOCIAL_DOMAINS],
+      timeoutSec: typeof tool6Data?.timeoutSec === 'number' && tool6Data.timeoutSec > 0 ? tool6Data.timeoutSec : 12,
+      maxRedirectsThreshold: typeof tool6Data?.maxRedirectsThreshold === 'number' && tool6Data.maxRedirectsThreshold >= 0 ? tool6Data.maxRedirectsThreshold : 2,
+      ignoredAssetTypes: Array.isArray(tool6Data?.ignoredAssetTypes) ? tool6Data.ignoredAssetTypes : [],
+    };
+
     return {
       domain,
       global: {
@@ -284,6 +341,7 @@ class DomainSettingsStore {
         rules: globalRules,
       },
       tools: toolsData,
+      tool6,
       updatedAt: data?.updatedAt || Date.now(),
     };
   }
@@ -304,6 +362,32 @@ class DomainSettingsStore {
     }
 
     return JSON.parse(JSON.stringify(settings));
+  }
+
+  /**
+   * Get Tool 6 specific settings for a domain
+   */
+  public getTool6Settings(domainInput: string): Tool6Settings {
+    const settings = this.getDomainSettings(domainInput);
+    return settings.tool6 || createDefaultTool6Settings();
+  }
+
+  /**
+   * Save Tool 6 specific settings for a domain
+   */
+  public saveTool6Settings(domainInput: string, tool6Update: Partial<Tool6Settings>): Tool6Settings {
+    const domainKey = normalizeDomainKey(domainInput);
+    const existing = this.getDomainSettings(domainKey);
+    const currentTool6 = existing.tool6 || createDefaultTool6Settings();
+
+    const mergedTool6: Tool6Settings = {
+      ...currentTool6,
+      ...tool6Update,
+    };
+
+    existing.tool6 = mergedTool6;
+    this.saveDomainSettings(domainKey, existing);
+    return mergedTool6;
   }
 
   /**

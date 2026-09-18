@@ -4,6 +4,12 @@ import {
   SitemapValidationResult,
   HeaderValidationResult,
   AmpValidationResult,
+  AssetValidationResult,
+  VisualValidationResult,
+  InteractionValidationResult,
+  AssetValidationOptions,
+  VisualValidationOptions,
+  InteractionValidationOptions,
   ValidationSummary,
 } from '../../src/types';
 import { crawlStore, StoredCrawlSession } from './crawlStore';
@@ -12,6 +18,9 @@ import { validateLanguageCompleteness } from '../validators/languageCompleteness
 import { validateContentLanguage } from '../validators/contentLanguageValidator';
 import { headerValidator, HeaderValidationOptions } from '../validators/headerValidator';
 import { validateAmp, AmpValidationOptions } from '../validators/ampValidator';
+import { assetValidator } from '../validators/assetValidator';
+import { visualValidator } from '../validators/visualValidator';
+import { interactionValidator } from '../validators/interactionValidator';
 import { getEffectiveIgnoredSlugs } from './settingsStore';
 import { hasIgnoredSlug } from '../crawler/urlNormalizer';
 
@@ -135,36 +144,142 @@ export class ValidationService {
     return ampResult;
   }
 
+  public async validateAssetOnly(
+    crawlId: string,
+    options: AssetValidationOptions = {}
+  ): Promise<AssetValidationResult> {
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      throw new Error(`Crawl session ${crawlId} not found in store`);
+    }
+
+    const assetResult = await assetValidator.validate(session, options);
+
+    const existing = crawlStore.getValidation(crawlId) || {
+      crawlId,
+      timestamp: Date.now(),
+      overallStatus: 'not_run',
+    };
+    existing.assetValidation = assetResult;
+    existing.overallStatus = this.calculateOverallStatus(existing);
+    crawlStore.setValidation(crawlId, existing);
+
+    this.annotateSessionItems(session, existing);
+
+    return assetResult;
+  }
+
+  public async validateVisualOnly(
+    crawlId: string,
+    options: VisualValidationOptions = {}
+  ): Promise<VisualValidationResult> {
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      throw new Error(`Crawl session ${crawlId} not found in store`);
+    }
+
+    const visualResult = await visualValidator.validate(session, options);
+
+    const existing = crawlStore.getValidation(crawlId) || {
+      crawlId,
+      timestamp: Date.now(),
+      overallStatus: 'not_run',
+    };
+    existing.visualValidation = visualResult;
+    existing.overallStatus = this.calculateOverallStatus(existing);
+    crawlStore.setValidation(crawlId, existing);
+
+    this.annotateSessionItems(session, existing);
+
+    return visualResult;
+  }
+
+  public async validateInteractionOnly(
+    crawlId: string,
+    options: InteractionValidationOptions = {}
+  ): Promise<InteractionValidationResult> {
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      throw new Error(`Crawl session ${crawlId} not found in store`);
+    }
+
+    const interactionResult = await interactionValidator.validate(session, options);
+
+    const existing = crawlStore.getValidation(crawlId) || {
+      crawlId,
+      timestamp: Date.now(),
+      overallStatus: 'not_run',
+    };
+    existing.interactionValidation = interactionResult;
+    existing.overallStatus = this.calculateOverallStatus(existing);
+    crawlStore.setValidation(crawlId, existing);
+
+    this.annotateSessionItems(session, existing);
+
+    return interactionResult;
+  }
+
   public async runAllValidations(
     crawlId: string,
     confidenceThreshold?: number,
     headerOptions?: HeaderValidationOptions,
-    ampOptions?: AmpValidationOptions
+    ampOptions?: AmpValidationOptions,
+    assetOptions?: AssetValidationOptions,
+    visualOptions?: VisualValidationOptions,
+    interactionOptions?: InteractionValidationOptions
   ): Promise<ValidationSummary> {
     const session = crawlStore.getSession(crawlId);
     if (!session) {
       throw new Error(`Crawl session ${crawlId} not found in store`);
     }
 
-    // Run all validation checks using the stored crawl dataset
+    // Run static in-memory validation checks
     const sitemap = validateSitemap(session);
     const completeness = validateLanguageCompleteness(session);
     const contentLanguage = validateContentLanguage(session, confidenceThreshold);
 
-    // Run Header & Language Navigation validator with Playwright
-    let headerNavigation: HeaderValidationResult | undefined;
-    try {
-      headerNavigation = await headerValidator.validate(session, headerOptions || { maxPages: 10 });
-    } catch (err) {
-      console.warn('Header validation during runAllValidations failed:', err);
+    // 1. Run static and network-only validators concurrently
+    const [assetRes, ampRes] = await Promise.allSettled([
+      assetValidator.validate(session, assetOptions || {}),
+      validateAmp(session, ampOptions || { passThreshold: 95, warnThreshold: 85 }),
+    ]);
+
+    // 2. Run browser-rendered / DOM validators in sequence to prevent container process contention
+    const headerRes = await Promise.allSettled([
+      headerValidator.validate(session, headerOptions || { maxPages: 10 }),
+    ]).then(([r]) => r);
+
+    const visualRes = await Promise.allSettled([
+      visualValidator.validate(session, visualOptions || { maxPages: 8 }),
+    ]).then(([r]) => r);
+
+    const interactionRes = await Promise.allSettled([
+      interactionValidator.validate(session, interactionOptions || { maxPages: 8 }),
+    ]).then(([r]) => r);
+
+    const assetValidation = assetRes.status === 'fulfilled' ? assetRes.value : undefined;
+    if (assetRes.status === 'rejected') {
+      console.warn('Asset validation during runAllValidations failed:', assetRes.reason);
     }
 
-    // Run AMP Validation
-    let ampValidation: AmpValidationResult | undefined;
-    try {
-      ampValidation = await validateAmp(session, ampOptions || { passThreshold: 95, warnThreshold: 85 });
-    } catch (err) {
-      console.warn('AMP validation during runAllValidations failed:', err);
+    const headerNavigation = headerRes.status === 'fulfilled' ? headerRes.value : undefined;
+    if (headerRes.status === 'rejected') {
+      console.warn('Header validation during runAllValidations failed:', headerRes.reason);
+    }
+
+    const ampValidation = ampRes.status === 'fulfilled' ? ampRes.value : undefined;
+    if (ampRes.status === 'rejected') {
+      console.warn('AMP validation during runAllValidations failed:', ampRes.reason);
+    }
+
+    const visualValidation = visualRes.status === 'fulfilled' ? visualRes.value : undefined;
+    if (visualRes.status === 'rejected') {
+      console.warn('Visual validation during runAllValidations failed:', visualRes.reason);
+    }
+
+    const interactionValidation = interactionRes.status === 'fulfilled' ? interactionRes.value : undefined;
+    if (interactionRes.status === 'rejected') {
+      console.warn('Interaction validation during runAllValidations failed:', interactionRes.reason);
     }
 
     const summary: ValidationSummary = {
@@ -175,6 +290,9 @@ export class ValidationService {
       contentLanguage,
       headerNavigation,
       ampValidation,
+      assetValidation,
+      visualValidation,
+      interactionValidation,
       overallStatus: 'not_run',
     };
 
@@ -298,6 +416,33 @@ export class ValidationService {
       }
     }
 
+    if (val.assetValidation) {
+      if (val.assetValidation.errorCount > 0) {
+        hasError = true;
+      }
+      if (val.assetValidation.warningCount > 0) {
+        hasWarning = true;
+      }
+    }
+
+    if (val.visualValidation) {
+      if (val.visualValidation.totalErrors > 0) {
+        hasError = true;
+      }
+      if (val.visualValidation.totalWarnings > 0) {
+        hasWarning = true;
+      }
+    }
+
+    if (val.interactionValidation) {
+      if (val.interactionValidation.errorCount > 0) {
+        hasError = true;
+      }
+      if (val.interactionValidation.warningCount > 0) {
+        hasWarning = true;
+      }
+    }
+
     if (hasError) return 'error';
     if (hasWarning) return 'warning';
     return 'passed';
@@ -305,4 +450,5 @@ export class ValidationService {
 }
 
 export const validationService = new ValidationService();
+
 

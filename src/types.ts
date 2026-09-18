@@ -9,6 +9,8 @@ export interface CrawlSettings {
   confidenceThreshold?: number; // default 90%
   ignoredSlugs?: string[]; // path segments to completely ignore e.g. ['community']
   dynamicSelectors?: string[]; // CSS selectors for dynamic content to ignore in language validation
+  crawlMode?: 'domain' | 'url_list';
+  targetUrls?: string[];
 }
 
 // ---------------- EXCLUSIONS & TOOL-SPECIFIC SETTINGS ----------------
@@ -18,7 +20,10 @@ export type ValidationToolId =
   | 'languageCompleteness'
   | 'contentLanguage'
   | 'headerLanguage'
-  | 'amp';
+  | 'amp'
+  | 'asset'
+  | 'visual'
+  | 'interaction';
 
 export type ExclusionType = 'slug' | 'exact' | 'pattern';
 
@@ -52,7 +57,11 @@ export interface DomainSettings {
     contentLanguage: DomainToolExclusions;
     headerLanguage: DomainToolExclusions;
     amp: DomainToolExclusions;
+    asset: DomainToolExclusions;
+    visual: DomainToolExclusions;
+    interaction: DomainToolExclusions;
   };
+  tool6?: Tool6Settings;
   updatedAt?: number;
 }
 
@@ -117,6 +126,9 @@ export interface CrawlUrlItem {
   inSitemap?: boolean;
   sitemapSource?: string;
   amphtmlUrl?: string;
+  canonicalUrl?: string;
+  hreflangMap?: Record<string, string>;
+  responseTimeMs?: number;
 }
 
 export type CrawlStatus = 'idle' | 'discovering_sitemaps' | 'crawling' | 'completed' | 'stopped' | 'error';
@@ -126,6 +138,8 @@ export interface CrawlStats {
   domain: string;
   normalizedDomain: string;
   status: CrawlStatus;
+  crawlMode?: 'domain' | 'url_list';
+  targetUrlsCount?: number;
   pagesCrawled: number;
   uniqueUrlsCount: number;
   queueRemaining: number;
@@ -138,6 +152,8 @@ export interface CrawlStats {
   languageCounts: Record<string, LanguageInfo>;
   startedAt?: number;
   completedAt?: number;
+  durationMs?: number;
+  pagesPerSecond?: number;
   errorMessage?: string;
 }
 
@@ -293,6 +309,9 @@ export interface ValidationSummary {
   contentLanguage?: ContentLanguageResult;
   headerNavigation?: HeaderValidationResult;
   ampValidation?: AmpValidationResult;
+  assetValidation?: AssetValidationResult;
+  visualValidation?: VisualValidationResult;
+  interactionValidation?: InteractionValidationResult;
   overallStatus: 'passed' | 'warning' | 'error' | 'not_run';
 }
 
@@ -502,5 +521,380 @@ export interface AmpValidationResult {
   timestamp: number;
   ignoredUrls?: string[];
 }
+
+// ========================================================
+// TOOL 6: LINKS, ASSETS & HTTP HEALTH VALIDATION TYPES
+// ========================================================
+
+export type AssetType =
+  | 'IMAGE'
+  | 'VIDEO'
+  | 'PDF'
+  | 'DOCUMENT'
+  | 'INTERNAL_LINK'
+  | 'EXTERNAL_LINK'
+  | 'OTHER';
+
+export type AssetElementType =
+  | 'img'
+  | 'picture'
+  | 'source'
+  | 'video'
+  | 'a_pdf'
+  | 'embed_pdf'
+  | 'object_pdf'
+  | 'iframe_video'
+  | 'doc_link'
+  | 'internal_link'
+  | 'external_link'
+  | 'css_background'
+  | 'other';
+
+export type AssetStatus = 'passed' | 'warning' | 'error' | 'skipped' | 'ignored' | 'needs_review';
+
+export type AssetAltStatus =
+  | 'ALT_PRESENT'
+  | 'ALT_EMPTY'
+  | 'ALT_MISSING'
+  | 'ALT_NEEDS_REVIEW'
+  | 'WEAK_ALT_TEXT'
+  | 'NOT_APPLICABLE';
+
+export type ImageMeaningCategory = 'DECORATIVE' | 'INFORMATIVE' | 'UNKNOWN';
+
+export interface RedirectChainStep {
+  url: string;
+  status: number;
+}
+
+export type RedirectIssueType =
+  | 'REDIRECT_OK'
+  | 'REDIRECT_CHAIN'
+  | 'REDIRECT_LOOP'
+  | 'REDIRECT_TO_404'
+  | 'REDIRECT_EXTERNAL'
+  | 'REDIRECT_HTTP_TO_HTTPS'
+  | 'NONE';
+
+export interface AssetRecord {
+  id: string;
+  url: string;
+  normalizedUrl: string;
+  sourcePages: string[];
+  foundOnPages?: string[];
+  primarySourcePage: string;
+  assetType: AssetType;
+  elementType: AssetElementType;
+  statusCode?: number;
+  status: AssetStatus;
+  statusLabel: string;
+  contentType?: string;
+  finalUrl?: string;
+  redirectChain?: RedirectChainStep[];
+  redirectChainLength?: number;
+  redirectIssue?: RedirectIssueType;
+  responseTimeMs?: number;
+  error?: string;
+  skipReason?: string;
+  alt?: string;
+  hasAlt?: boolean;
+  altStatus?: AssetAltStatus;
+  altCategory?: ImageMeaningCategory;
+  altReviewNote?: string;
+  width?: number;
+  height?: number;
+  visible?: boolean;
+  details?: string;
+  ignoreReason?: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+export type AssetValidationItem = AssetRecord;
+export type ValidationItemStatus = 'passed' | 'warning' | 'error' | 'skipped' | 'ignored' | 'needs_review';
+
+export type ExternalUrlValidationMode = 'none' | 'all' | 'selected_domains';
+
+export interface Tool6Settings {
+  externalUrlValidation: ExternalUrlValidationMode;
+  selectedExternalDomains: string[];
+  enableSocialExclusions: boolean;
+  socialDomains: string[];
+  timeoutSec: number;
+  maxRedirectsThreshold: number;
+  ignoredAssetTypes: AssetType[];
+}
+
+export interface AssetValidationResult {
+  pagesChecked: number;
+  pagesIgnored?: number;
+  totalAssets: number;
+  totalResources: number;
+  totalInternalLinks: number;
+  totalExternalLinks: number;
+  totalImages: number;
+  totalVideos: number;
+  totalPdfs: number;
+  totalDocuments: number;
+  brokenAssets: number;
+  errors404: number;
+  errors4xx: number;
+  errors5xx: number;
+  failedRequests: number;
+  totalRedirects: number;
+  redirectChains: number;
+  missingAltCount: number;
+  emptyAltCount: number;
+  weakAltCount: number;
+  skippedCount: number;
+  warningCount: number;
+  passedCount: number;
+  errorCount: number;
+  overallStatus: 'passed' | 'warning' | 'error' | 'skipped';
+  assets: AssetRecord[];
+  items?: AssetRecord[];
+  timestamp: number;
+  ignoredUrls?: string[];
+}
+
+export interface AssetValidationOptions {
+  externalUrlValidation?: ExternalUrlValidationMode;
+  selectedExternalDomains?: string[];
+  enableSocialExclusions?: boolean;
+  socialDomains?: string[];
+  customSocialDomains?: string[];
+  checkExternalLinks?: boolean;
+  checkImages?: boolean;
+  checkVideos?: boolean;
+  checkPdfs?: boolean;
+  checkDocuments?: boolean;
+  checkInternalLinks?: boolean;
+  ignoredAssetTypes?: AssetType[];
+  maxRedirectsThreshold?: number;
+  concurrency?: number;
+  timeoutSec?: number;
+  maxAssets?: number;
+}
+
+// ========================================================
+// TOOL 7: VISUAL, RESPONSIVE & VIEWPORT VALIDATION TYPES
+// ========================================================
+
+export type ViewportPresetId =
+  | 'mobile_small'
+  | 'mobile'
+  | 'mobile_large'
+  | 'tablet'
+  | 'desktop'
+  | 'desktop_large'
+  | 'large_desktop'
+  | 'custom';
+
+export interface ViewportConfig {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  isMobile?: boolean;
+}
+
+export type VisualIssueType =
+  | 'HORIZONTAL_SCROLL'
+  | 'TEXT_CROPPED'
+  | 'TEXT_OVERFLOW'
+  | 'TEXT_TRUNCATED'
+  | 'IMAGE_CROPPED'
+  | 'VIDEO_CROPPED'
+  | 'PDF_CROPPED'
+  | 'OUTSIDE_VIEWPORT'
+  | 'OVERFLOW'
+  | 'ZERO_SIZE'
+  | 'PARTIALLY_VISIBLE'
+  | 'FIXED_ELEMENT_OVERLAP'
+  | 'HIDDEN_CONTENT'
+  | 'CONSENT_BANNER_ISSUE'
+  | 'NEEDS_REVIEW';
+
+export interface VisualBoundingBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+export type VisualItemStatus = 'passed' | 'warning' | 'error' | 'skipped' | 'ignored' | 'needs_review';
+
+export interface VisualValidationItem {
+  id: string;
+  pageUrl: string;
+  canonicalPath: string;
+  viewport: ViewportConfig;
+  issueType: VisualIssueType;
+  elementSelector?: string;
+  elementTag?: string;
+  textSample?: string;
+  boundingBox?: VisualBoundingBox;
+  cssReason?: string;
+  screenshotBase64?: string;
+  status: VisualItemStatus;
+  statusLabel: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  details?: string;
+  ignoreReason?: string;
+}
+
+export interface VisualValidationResult {
+  pagesChecked: number;
+  pagesIgnored?: number;
+  viewportsTested: ViewportConfig[];
+  horizontalScrollIssues: number;
+  textIssues: number;
+  imageIssues: number;
+  videoIssues: number;
+  pdfIssues: number;
+  hiddenContentIssues: number;
+  consentIssues: number;
+  fixedElementIssues: number;
+  totalErrors: number;
+  totalWarnings: number;
+  totalPassed: number;
+  overallStatus: 'passed' | 'warning' | 'error' | 'skipped';
+  items: VisualValidationItem[];
+  timestamp: number;
+  ignoredUrls?: string[];
+}
+
+export interface VisualValidationOptions {
+  maxPages?: number;
+  specificUrls?: string[];
+  viewports?: ViewportConfig[];
+  captureScreenshots?: boolean;
+  horizontalScrollThresholdPx?: number;
+  ignoreSelectors?: string[];
+}
+
+// ========================================================
+// TOOL 8: INTERACTION & CONSOLE VALIDATION TYPES
+// ========================================================
+
+export type InteractionElementType =
+  | 'button'
+  | 'link'
+  | 'dropdown'
+  | 'accordion'
+  | 'tab'
+  | 'modal_trigger'
+  | 'form_control'
+  | 'navigation'
+  | 'language_selector'
+  | 'other';
+
+export type InteractionResultType =
+  | 'ACTION_SUCCESS_DOM'
+  | 'ACTION_SUCCESS_NAV'
+  | 'ACTION_SUCCESS_MODAL'
+  | 'ACTION_SUCCESS_DROPDOWN'
+  | 'ACTION_SUCCESS_TAB'
+  | 'ACTION_SUCCESS_ACCORDION'
+  | 'BUTTON_NO_ACTION'
+  | 'NAVIGATION_ERROR'
+  | 'JS_EXCEPTION'
+  | 'CONSOLE_ERROR'
+  | 'NETWORK_ERROR'
+  | 'SKIPPED_DISABLED'
+  | 'SKIPPED_DESTRUCTIVE'
+  | 'NEEDS_REVIEW';
+
+export type ConsoleErrorPhase = 'PAGE_LOAD' | 'AFTER_ACTION';
+
+export interface CapturedConsoleError {
+  id: string;
+  pageUrl: string;
+  type: 'error' | 'warn' | 'pageerror';
+  message: string;
+  source?: string;
+  stack?: string;
+  timestamp: number;
+  phase: ConsoleErrorPhase;
+  elementSelector?: string;
+  actionName?: string;
+}
+
+export interface GroupedConsoleError {
+  id: string;
+  type: 'error' | 'warn' | 'pageerror';
+  normalizedMessage: string;
+  occurrences: number;
+  pages: string[];
+  firstSeenPhase: ConsoleErrorPhase;
+  stackSample?: string;
+}
+
+export interface CapturedNetworkError {
+  url: string;
+  method: string;
+  status: number;
+  errorText?: string;
+  phase: ConsoleErrorPhase;
+  elementSelector?: string;
+}
+
+export type InteractionItemStatus = 'passed' | 'warning' | 'error' | 'skipped' | 'ignored' | 'needs_review';
+
+export interface InteractionValidationItem {
+  id: string;
+  pageUrl: string;
+  canonicalPath: string;
+  elementSelector: string;
+  elementType: InteractionElementType;
+  elementText: string;
+  action: string;
+  result: InteractionResultType;
+  resultSummary: string;
+  urlBefore: string;
+  urlAfter?: string;
+  domChanged: boolean;
+  visibilityChanged: boolean;
+  networkActivity: boolean;
+  consoleErrors: CapturedConsoleError[];
+  networkErrors: CapturedNetworkError[];
+  status: InteractionItemStatus;
+  statusLabel: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  screenshotBase64?: string;
+  details?: string;
+  ignoreReason?: string;
+}
+
+export interface InteractionValidationResult {
+  pagesChecked: number;
+  pagesIgnored?: number;
+  interactiveElementsFound: number;
+  elementsTested: number;
+  passedCount: number;
+  warningCount: number;
+  errorCount: number;
+  noActionCount: number;
+  consoleErrorCount: number;
+  networkErrorCount: number;
+  skippedCount: number;
+  needsReviewCount: number;
+  overallStatus: 'passed' | 'warning' | 'error' | 'skipped';
+  items: InteractionValidationItem[];
+  groupedConsoleErrors: GroupedConsoleError[];
+  timestamp: number;
+  ignoredUrls?: string[];
+}
+
+export interface InteractionValidationOptions {
+  maxPages?: number;
+  maxElementsPerPage?: number;
+  observationTimeoutMs?: number;
+  safeMode?: boolean;
+  specificUrls?: string[];
+  excludedSelectors?: string[];
+}
+
 
 

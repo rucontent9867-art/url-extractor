@@ -7,6 +7,9 @@ import {
   ContentLanguageResult,
   HeaderValidationResult,
   AmpValidationResult,
+  AssetValidationResult,
+  VisualValidationResult,
+  InteractionValidationResult,
 } from '../../types';
 import { ValidationSummaryCard } from './ValidationSummaryCard';
 import { SitemapValidation } from './SitemapValidation';
@@ -14,7 +17,21 @@ import { LanguageCompleteness } from './LanguageCompleteness';
 import { ContentLanguageValidation } from './ContentLanguageValidation';
 import { HeaderLanguageValidation } from './HeaderLanguageValidation';
 import { AmpValidation } from './AmpValidation';
-import { ShieldCheck, Layers, Languages, Smartphone, Zap, AlertCircle, X } from 'lucide-react';
+import { AssetValidation } from './AssetValidation';
+import { VisualValidation } from './VisualValidation';
+import { InteractionValidation } from './InteractionValidation';
+import {
+  ShieldCheck,
+  Layers,
+  Languages,
+  Smartphone,
+  Zap,
+  FileCheck2,
+  Eye,
+  MousePointerClick,
+  AlertCircle,
+  X,
+} from 'lucide-react';
 import { fetchJson } from '../../utils/apiUtils';
 
 interface ValidationDashboardProps {
@@ -28,7 +45,9 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   crawlStats,
   onValidationComplete,
 }) => {
-  const [activeTab, setActiveTab] = useState<'sitemap' | 'completeness' | 'content' | 'header' | 'amp'>('sitemap');
+  const [activeTab, setActiveTab] = useState<
+    'sitemap' | 'completeness' | 'content' | 'header' | 'amp' | 'asset' | 'visual' | 'interaction'
+  >('sitemap');
   const [summary, setSummary] = useState<ValidationSummary | null>(null);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [isSitemapLoading, setIsSitemapLoading] = useState(false);
@@ -36,6 +55,9 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   const [isContentLangLoading, setIsContentLangLoading] = useState(false);
   const [isHeaderLoading, setIsHeaderLoading] = useState(false);
   const [isAmpLoading, setIsAmpLoading] = useState(false);
+  const [isAssetLoading, setIsAssetLoading] = useState(false);
+  const [isVisualLoading, setIsVisualLoading] = useState(false);
+  const [isInteractionLoading, setIsInteractionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Fetch initial validation results if session exists
@@ -204,6 +226,90 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     }
   };
 
+  const handleRunAsset = async (options?: any) => {
+    if (!crawlId) return;
+    setIsAssetLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const data = await fetchJson<{ assetValidation: AssetValidationResult }>(`/api/validation/asset/${crawlId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options || {}),
+      });
+
+      setSummary((prev) => ({
+        crawlId,
+        timestamp: Date.now(),
+        overallStatus: prev?.overallStatus || 'passed',
+        ...prev,
+        assetValidation: data.assetValidation,
+      }));
+      onValidationComplete?.();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error validating assets & links');
+    } finally {
+      setIsAssetLoading(false);
+    }
+  };
+
+  const handleRunVisual = async (options?: any) => {
+    if (!crawlId) return;
+    setIsVisualLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const data = await fetchJson<{ visualValidation: VisualValidationResult }>(`/api/validation/visual/${crawlId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options || {}),
+      });
+
+      setSummary((prev) => ({
+        crawlId,
+        timestamp: Date.now(),
+        overallStatus: prev?.overallStatus || 'passed',
+        ...prev,
+        visualValidation: data.visualValidation,
+      }));
+      onValidationComplete?.();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error executing visual & viewport validation');
+    } finally {
+      setIsVisualLoading(false);
+    }
+  };
+
+  const handleRunInteraction = async (options?: any) => {
+    if (!crawlId) return;
+    setIsInteractionLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const data = await fetchJson<{ interactionValidation: InteractionValidationResult }>(
+        `/api/validation/interaction/${crawlId}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(options || {}),
+        }
+      );
+
+      setSummary((prev) => ({
+        crawlId,
+        timestamp: Date.now(),
+        overallStatus: prev?.overallStatus || 'passed',
+        ...prev,
+        interactionValidation: data.interactionValidation,
+      }));
+      onValidationComplete?.();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error executing interaction & console validation');
+    } finally {
+      setIsInteractionLoading(false);
+    }
+  };
+
   if (!crawlId || !crawlStats || crawlStats.status === 'idle') {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
@@ -213,8 +319,8 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
           </div>
           <h3 className="text-base font-bold text-slate-900">No Active Crawl Dataset</h3>
           <p className="text-xs text-slate-500">
-            Please crawl a website first in Stage 1. Once crawled, all validation tools (Sitemap Coverage,
-            Language Completeness, Text Language Verification, and Header & Language Navigation) will instantly analyze the discovered
+            Please crawl a website first in Stage 1. Once crawled, all 8 automated validation tools (Sitemap Coverage,
+            Language Completeness, Content Verification, Navigation Switches, AMP Parity, Asset Health, Viewport Testing, and Interactive Controls) will instantly analyze the discovered
             dataset.
           </p>
         </div>
@@ -262,7 +368,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
             }`}
           >
             <ShieldCheck className="h-4 w-4" />
-            <span>1. English URLs vs. Sitemap</span>
+            <span>1. Sitemap</span>
             {summary?.sitemap && (
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -271,7 +377,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {summary.sitemap.missingFromSitemap === 0 ? 'Pass' : `${summary.sitemap.missingFromSitemap} Missing`}
+                {summary.sitemap.missingFromSitemap === 0 ? 'Pass' : `${summary.sitemap.missingFromSitemap} Miss`}
               </span>
             )}
           </button>
@@ -287,7 +393,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
             }`}
           >
             <Layers className="h-4 w-4" />
-            <span>2. Language Page Completeness</span>
+            <span>2. Completeness</span>
             {summary?.completeness && (
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -296,7 +402,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {summary.completeness.totalMissing === 0 ? 'Pass' : `${summary.completeness.totalMissing} Missing`}
+                {summary.completeness.totalMissing === 0 ? 'Pass' : `${summary.completeness.totalMissing} Miss`}
               </span>
             )}
           </button>
@@ -312,7 +418,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
             }`}
           >
             <Languages className="h-4 w-4" />
-            <span>3. Page Content Language</span>
+            <span>3. Content Lang</span>
             {summary?.contentLanguage && (
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -323,7 +429,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
               >
                 {summary.contentLanguage.mismatchCount === 0
                   ? 'Pass'
-                  : `${summary.contentLanguage.mismatchCount} Errors`}
+                  : `${summary.contentLanguage.mismatchCount} Err`}
               </span>
             )}
           </button>
@@ -339,7 +445,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
             }`}
           >
             <Smartphone className="h-4 w-4" />
-            <span>4. Header & Language Navigation</span>
+            <span>4. Navigation</span>
             {summary?.headerNavigation && (
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -352,7 +458,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                 {summary.headerNavigation.headerMismatchCount === 0 &&
                 summary.headerNavigation.totalLanguageErrors === 0
                   ? 'Pass'
-                  : `${summary.headerNavigation.headerMismatchCount + summary.headerNavigation.totalLanguageErrors} Errors`}
+                  : `${summary.headerNavigation.headerMismatchCount + summary.headerNavigation.totalLanguageErrors} Err`}
               </span>
             )}
           </button>
@@ -368,7 +474,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
             }`}
           >
             <Zap className="h-4 w-4" />
-            <span>5. AMP Validation</span>
+            <span>5. AMP</span>
             {summary?.ampValidation && (
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -383,7 +489,88 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                   ? summary.ampValidation.warningCount === 0
                     ? summary.ampValidation.totalAmpFound > 0 ? 'Pass' : '0 AMP'
                     : `${summary.ampValidation.warningCount} Warn`
-                  : `${summary.ampValidation.errorCount} Errors`}
+                  : `${summary.ampValidation.errorCount} Err`}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 6: Links, Assets & HTTP Health */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('asset')}
+            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+              activeTab === 'asset'
+                ? 'border-slate-900 text-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileCheck2 className="h-4 w-4" />
+            <span>6. Links, Assets & Health</span>
+            {summary?.assetValidation && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  summary.assetValidation.brokenCount === 0
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                {summary.assetValidation.brokenCount === 0
+                  ? 'Pass'
+                  : `${summary.assetValidation.brokenCount} Broken`}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 7: Visual & Viewport */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('visual')}
+            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+              activeTab === 'visual'
+                ? 'border-slate-900 text-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Eye className="h-4 w-4" />
+            <span>7. Visual / Viewport</span>
+            {summary?.visualValidation && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  summary.visualValidation.totalErrors === 0
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                {summary.visualValidation.totalErrors === 0
+                  ? 'Pass'
+                  : `${summary.visualValidation.totalErrors} Breaks`}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 8: Interaction & Console */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('interaction')}
+            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+              activeTab === 'interaction'
+                ? 'border-slate-900 text-slate-900'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <MousePointerClick className="h-4 w-4" />
+            <span>8. Interaction</span>
+            {summary?.interactionValidation && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                  summary.interactionValidation.errorCount === 0
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                {summary.interactionValidation.errorCount === 0
+                  ? 'Pass'
+                  : `${summary.interactionValidation.consoleErrorCount} JS Err`}
               </span>
             )}
           </button>
@@ -435,7 +622,35 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
           onRunValidation={handleRunAmp}
         />
       )}
+
+      {activeTab === 'asset' && (
+        <AssetValidation
+          result={summary?.assetValidation || null}
+          isLoading={isAssetLoading || isRunningAll}
+          domain={crawlStats?.domain || ''}
+          onRunValidation={handleRunAsset}
+        />
+      )}
+
+      {activeTab === 'visual' && (
+        <VisualValidation
+          result={summary?.visualValidation || null}
+          isLoading={isVisualLoading || isRunningAll}
+          domain={crawlStats?.domain || ''}
+          onRunValidation={handleRunVisual}
+        />
+      )}
+
+      {activeTab === 'interaction' && (
+        <InteractionValidation
+          result={summary?.interactionValidation || null}
+          isLoading={isInteractionLoading || isRunningAll}
+          domain={crawlStats?.domain || ''}
+          onRunValidation={handleRunInteraction}
+        />
+      )}
     </div>
   );
 };
+
 

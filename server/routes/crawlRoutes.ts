@@ -23,6 +23,22 @@ crawlRouter.post('/settings/domain', (req, res) => {
   return res.json({ success: true, domain: updated.domain, settings: updated });
 });
 
+// Tool 6 Settings endpoints
+crawlRouter.get('/settings/tool6', (req, res) => {
+  const domain = String(req.query.domain || 'default');
+  const tool6 = domainSettingsStore.getTool6Settings(domain);
+  return res.json({ domain, tool6 });
+});
+
+crawlRouter.post('/settings/tool6', (req, res) => {
+  const { domain, tool6 } = req.body;
+  if (!domain || typeof domain !== 'string') {
+    return res.status(400).json({ error: 'Domain is required' });
+  }
+  const updated = domainSettingsStore.saveTool6Settings(domain, tool6 || {});
+  return res.json({ success: true, domain, tool6: updated });
+});
+
 crawlRouter.post('/settings/domain/exclusion', (req, res) => {
   const { domain, tool, type, value } = req.body;
   if (!domain || typeof domain !== 'string') {
@@ -134,22 +150,50 @@ crawlRouter.post('/validate-domain', (req, res) => {
   });
 });
 
-// Start crawling endpoint
+// Start crawling endpoint (Supports both Domain Crawl and Direct URL List Validation)
 crawlRouter.post('/crawl/start', (req, res) => {
   try {
-    const { domain, settings } = req.body;
-    if (!domain || typeof domain !== 'string') {
-      return res.status(400).json({ error: 'Domain or URL is required' });
+    const { domain, urls, crawlMode, settings } = req.body;
+    let targetUrls: string[] = [];
+
+    // Parse target URLs if provided either in urls or settings.targetUrls
+    if (Array.isArray(urls)) {
+      targetUrls = urls.map((u) => String(u).trim()).filter(Boolean);
+    } else if (typeof urls === 'string' && urls.trim()) {
+      targetUrls = urls
+        .split(/[\r\n,]+/)
+        .map((u) => u.trim())
+        .filter((u) => u.length > 0 && (u.startsWith('http://') || u.startsWith('https://') || u.includes('.')));
+    } else if (Array.isArray(settings?.targetUrls)) {
+      targetUrls = settings.targetUrls.map((u: any) => String(u).trim()).filter(Boolean);
     }
 
-    const normalized = normalizeInputUrl(domain);
+    const isUrlListMode = crawlMode === 'url_list' || settings?.crawlMode === 'url_list' || targetUrls.length > 0;
+
+    let targetDomain = typeof domain === 'string' ? domain.trim() : '';
+
+    if (!targetDomain && targetUrls.length > 0) {
+      targetDomain = targetUrls[0];
+    }
+
+    if (!targetDomain) {
+      return res.status(400).json({ error: 'Domain or URL list is required.' });
+    }
+
+    const normalized = normalizeInputUrl(targetDomain);
     if (!normalized) {
       return res.status(400).json({
-        error: 'Invalid domain or URL. Please enter a valid website address.',
+        error: 'Invalid domain or URL. Please enter a valid website address or URL list.',
       });
     }
 
-    const session = crawlerManager.createSession(domain, settings);
+    const mergedSettings = {
+      ...(settings || {}),
+      crawlMode: (isUrlListMode ? 'url_list' : 'domain') as 'url_list' | 'domain',
+      targetUrls: isUrlListMode && targetUrls.length > 0 ? targetUrls : undefined,
+    };
+
+    const session = crawlerManager.createSession(targetDomain, mergedSettings);
 
     // Start crawl asynchronously
     session.start().catch((err) => {
