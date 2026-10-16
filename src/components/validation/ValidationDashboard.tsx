@@ -354,24 +354,26 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
         onSelectTab={setActiveTab}
       />
 
-      {/* Validation Navigation Tabs */}
-      <div className="border-b border-slate-200">
-        <div className="flex items-center space-x-2 sm:space-x-4 overflow-x-auto pb-px">
+      {/* Validation Navigation Tabs - All displayed on screen without horizontal scroll */}
+      <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full shadow-2xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 w-full">
           {/* Tab 1: English URLs vs. Sitemap */}
           <button
             type="button"
             onClick={() => setActiveTab('sitemap')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'sitemap'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <ShieldCheck className="h-4 w-4" />
-            <span>1. Sitemap</span>
-            {summary?.sitemap && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <ShieldCheck className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'sitemap' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">1. Sitemap</span>
+            </div>
+            {summary?.sitemap ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.sitemap.missingFromSitemap === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
@@ -379,24 +381,33 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
               >
                 {summary.sitemap.missingFromSitemap === 0 ? 'Pass' : `${summary.sitemap.missingFromSitemap} Miss`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'sitemap' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 2: Language Page Completeness */}
           <button
             type="button"
             onClick={() => setActiveTab('completeness')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'completeness'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <Layers className="h-4 w-4" />
-            <span>2. Completeness</span>
-            {summary?.completeness && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <Layers className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'completeness' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">2. Completeness</span>
+            </div>
+            {summary?.completeness ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.completeness.totalMissing === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
@@ -404,24 +415,33 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
               >
                 {summary.completeness.totalMissing === 0 ? 'Pass' : `${summary.completeness.totalMissing} Miss`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'completeness' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 3: Page Content Language */}
           <button
             type="button"
             onClick={() => setActiveTab('content')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'content'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <Languages className="h-4 w-4" />
-            <span>3. Content Lang</span>
-            {summary?.contentLanguage && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <Languages className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'content' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">3. Content Lang</span>
+            </div>
+            {summary?.contentLanguage ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.contentLanguage.mismatchCount === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
@@ -431,24 +451,33 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                   ? 'Pass'
                   : `${summary.contentLanguage.mismatchCount} Err`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'content' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 4: Header & Language Navigation */}
           <button
             type="button"
             onClick={() => setActiveTab('header')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'header'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <Smartphone className="h-4 w-4" />
-            <span>4. Navigation</span>
-            {summary?.headerNavigation && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <Smartphone className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'header' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">4. Navigation</span>
+            </div>
+            {summary?.headerNavigation ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.headerNavigation.headerMismatchCount === 0 &&
                   summary.headerNavigation.totalLanguageErrors === 0
                     ? 'bg-emerald-100 text-emerald-800'
@@ -460,24 +489,33 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                   ? 'Pass'
                   : `${summary.headerNavigation.headerMismatchCount + summary.headerNavigation.totalLanguageErrors} Err`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'header' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 5: AMP Validation */}
           <button
             type="button"
             onClick={() => setActiveTab('amp')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'amp'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <Zap className="h-4 w-4" />
-            <span>5. AMP</span>
-            {summary?.ampValidation && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <Zap className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'amp' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">5. AMP</span>
+            </div>
+            {summary?.ampValidation ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.ampValidation.errorCount === 0
                     ? summary.ampValidation.warningCount === 0
                       ? 'bg-emerald-100 text-emerald-800'
@@ -491,51 +529,69 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                     : `${summary.ampValidation.warningCount} Warn`
                   : `${summary.ampValidation.errorCount} Err`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'amp' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 6: Links, Assets & HTTP Health */}
           <button
             type="button"
             onClick={() => setActiveTab('asset')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'asset'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <FileCheck2 className="h-4 w-4" />
-            <span>6. Links, Assets & Health</span>
-            {summary?.assetValidation && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <FileCheck2 className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'asset' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">6. Assets & Health</span>
+            </div>
+            {summary?.assetValidation ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  summary.assetValidation.brokenCount === 0
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
+                  (summary.assetValidation.brokenAssets ?? (summary.assetValidation as any).brokenCount ?? 0) === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {summary.assetValidation.brokenCount === 0
+                {(summary.assetValidation.brokenAssets ?? (summary.assetValidation as any).brokenCount ?? 0) === 0
                   ? 'Pass'
-                  : `${summary.assetValidation.brokenCount} Broken`}
+                  : `${summary.assetValidation.brokenAssets ?? (summary.assetValidation as any).brokenCount ?? 0} Broken`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'asset' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 7: Visual & Viewport */}
           <button
             type="button"
             onClick={() => setActiveTab('visual')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'visual'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <Eye className="h-4 w-4" />
-            <span>7. Visual / Viewport</span>
-            {summary?.visualValidation && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <Eye className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'visual' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">7. Viewport</span>
+            </div>
+            {summary?.visualValidation ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.visualValidation.totalErrors === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
@@ -545,24 +601,33 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
                   ? 'Pass'
                   : `${summary.visualValidation.totalErrors} Breaks`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'visual' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
 
           {/* Tab 8: Interaction & Console */}
           <button
             type="button"
             onClick={() => setActiveTab('interaction')}
-            className={`py-3 px-3.5 text-xs font-semibold border-b-2 transition-colors flex items-center space-x-2 shrink-0 ${
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
               activeTab === 'interaction'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
             }`}
           >
-            <MousePointerClick className="h-4 w-4" />
-            <span>8. Interaction</span>
-            {summary?.interactionValidation && (
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <MousePointerClick className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'interaction' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">8. Interaction</span>
+            </div>
+            {summary?.interactionValidation ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
                   summary.interactionValidation.errorCount === 0
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
@@ -570,9 +635,16 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
               >
                 {summary.interactionValidation.errorCount === 0
                   ? 'Pass'
-                  : `${summary.interactionValidation.consoleErrorCount} JS Err`}
+                  : `${summary.interactionValidation.consoleErrorCount ?? summary.interactionValidation.errorCount} JS Err`}
               </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
             )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'interaction' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
           </button>
         </div>
       </div>

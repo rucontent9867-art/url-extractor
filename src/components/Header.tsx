@@ -67,7 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex items-center space-x-1 sm:space-x-2 border-t border-slate-100 pt-1 -mb-px overflow-x-auto">
+        <div className="flex flex-wrap items-center space-x-1 sm:space-x-2 border-t border-slate-100 pt-1 -mb-px">
           <button
             type="button"
             onClick={() => onSelectTab('crawler')}

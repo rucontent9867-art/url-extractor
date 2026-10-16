@@ -340,16 +340,18 @@ export const ValidationSummaryCard: React.FC<ValidationSummaryCardProps> = ({
             <div className="mt-2.5 space-y-0.5">
               <div className="flex items-baseline justify-between">
                 <span className="text-xl font-bold font-mono text-slate-900">
-                  {summary.assetValidation.totalAssetsScanned}
+                  {summary.assetValidation.totalAssetsScanned ?? summary.assetValidation.totalAssets ?? 0}
                 </span>
                 <span
                   className={`text-[10px] font-semibold ${
-                    summary.assetValidation.brokenCount === 0 ? 'text-emerald-600' : 'text-rose-600'
+                    (summary.assetValidation.brokenAssets ?? summary.assetValidation.brokenCount ?? 0) === 0
+                      ? 'text-emerald-600'
+                      : 'text-rose-600'
                   }`}
                 >
-                  {summary.assetValidation.brokenCount === 0
+                  {(summary.assetValidation.brokenAssets ?? summary.assetValidation.brokenCount ?? 0) === 0
                     ? '0 Broken'
-                    : `${summary.assetValidation.brokenCount} Broken`}
+                    : `${summary.assetValidation.brokenAssets ?? summary.assetValidation.brokenCount ?? 0} Broken`}
                 </span>
               </div>
               <p className="text-[10px] text-slate-500 truncate">

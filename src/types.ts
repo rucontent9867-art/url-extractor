@@ -636,6 +636,8 @@ export interface AssetValidationResult {
   totalPdfs: number;
   totalDocuments: number;
   brokenAssets: number;
+  brokenCount?: number;
+  totalAssetsScanned?: number;
   errors404: number;
   errors4xx: number;
   errors5xx: number;
