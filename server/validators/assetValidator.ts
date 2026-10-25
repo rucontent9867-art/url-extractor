@@ -101,7 +101,49 @@ interface HttpCheckCacheEntry {
   redirectChainLength: number;
   redirectIssue: RedirectIssueType;
   responseTimeMs: number;
+  headers?: Record<string, any>;
   error?: string;
+}
+
+export function detectCdnProvider(
+  url: string,
+  headers?: Record<string, any>
+): { provider: string; isCdn: boolean } {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+
+    // Check known CDN hostnames & CDN prefixes
+    if (host.includes('cloudflare') || host.includes('cdnjs.')) return { provider: 'Cloudflare', isCdn: true };
+    if (host.includes('cloudfront.net')) return { provider: 'AWS CloudFront', isCdn: true };
+    if (host.includes('fastly') || host.includes('fastlylb.net')) return { provider: 'Fastly', isCdn: true };
+    if (host.includes('akamai') || host.includes('akamaiedge.net') || host.includes('edgekey.net')) return { provider: 'Akamai', isCdn: true };
+    if (host.includes('jsdelivr.net')) return { provider: 'jsDelivr', isCdn: true };
+    if (host.includes('unpkg.com')) return { provider: 'unpkg', isCdn: true };
+    if (host.includes('googleusercontent.com') || host.includes('gstatic.com') || host.includes('googleapis.com')) {
+      return { provider: 'Google Cloud CDN', isCdn: true };
+    }
+    if (host.includes('wp.com') || host.includes('wordpress.com')) return { provider: 'Automattic / Jetpack', isCdn: true };
+    if (host.includes('azureedge.net') || host.includes('azurefd.net')) return { provider: 'Azure Front Door / CDN', isCdn: true };
+    if (host.includes('keycdn.com')) return { provider: 'KeyCDN', isCdn: true };
+    if (host.includes('bunnycdn') || host.includes('b-cdn.net')) return { provider: 'Bunny CDN', isCdn: true };
+
+    // Check response headers if present
+    if (headers) {
+      const server = String(headers['server'] || '').toLowerCase();
+      const cfRay = headers['cf-ray'];
+      const amzCf = headers['x-amz-cf-id'];
+      const fastlyRay = headers['x-fastly-request-id'];
+      if (cfRay || server.includes('cloudflare')) return { provider: 'Cloudflare', isCdn: true };
+      if (amzCf || server.includes('cloudfront')) return { provider: 'AWS CloudFront', isCdn: true };
+      if (fastlyRay || server.includes('varnish')) return { provider: 'Fastly', isCdn: true };
+      if (server.includes('akamaighost')) return { provider: 'Akamai', isCdn: true };
+    }
+
+    return { provider: 'Origin / Direct Host', isCdn: false };
+  } catch {
+    return { provider: 'Origin / Direct Host', isCdn: false };
+  }
 }
 
 export class AssetValidator {
@@ -414,6 +456,12 @@ export class AssetValidator {
     let totalInternalLinks = 0;
     let totalExternalLinks = 0;
 
+    const isHttpsOrigin = session.normalizedDomain?.startsWith('https:') || session.domain?.startsWith('https:');
+    let cdnCount = 0;
+    let originCount = 0;
+    let mixedContentCount = 0;
+    const cdnBreakdown: Record<string, number> = {};
+
     let counter = 0;
     for (const item of assetList) {
       counter++;
@@ -557,6 +605,26 @@ export class AssetValidator {
         passedCount++;
       }
 
+      // CDN and Mixed Content detection
+      const cdnInfo = detectCdnProvider(item.url, httpData.headers);
+      if (cdnInfo.isCdn) {
+        cdnCount++;
+      } else {
+        originCount++;
+      }
+      cdnBreakdown[cdnInfo.provider] = (cdnBreakdown[cdnInfo.provider] || 0) + 1;
+
+      const isMixedContent = isHttpsOrigin && item.url.startsWith('http://');
+      if (isMixedContent) {
+        mixedContentCount++;
+        if (finalStatus === 'passed') {
+          finalStatus = 'warning';
+          statusLabel = 'Insecure Mixed Content';
+          priority = 'HIGH';
+          warningCount++;
+        }
+      }
+
       if (httpData.redirectChainLength > 0) {
         totalRedirects++;
       }
@@ -579,6 +647,9 @@ export class AssetValidator {
         redirectChainLength: httpData.redirectChainLength,
         redirectIssue: httpData.redirectIssue,
         responseTimeMs: httpData.responseTimeMs,
+        cdnProvider: cdnInfo.provider,
+        isCdn: cdnInfo.isCdn,
+        isMixedContent,
         error: errorDesc,
         alt: item.alt,
         hasAlt: item.hasAltAttr,
@@ -624,6 +695,10 @@ export class AssetValidator {
       warningCount,
       passedCount,
       errorCount,
+      cdnCount,
+      originCount,
+      mixedContentCount,
+      cdnBreakdown,
       overallStatus,
       totalAssetsScanned: records.length,
       assets: records,
@@ -990,6 +1065,7 @@ export class AssetValidator {
         statusCode = checkRes.statusCode;
         contentType = checkRes.contentType;
         finalUrl = currentUrl;
+        const lastHeaders = checkRes.headers || {};
 
         const locationHeader = checkRes.headers['location'];
 
@@ -1043,6 +1119,7 @@ export class AssetValidator {
         redirectChainLength: chainLen,
         redirectIssue,
         responseTimeMs,
+        headers: checkRes ? checkRes.headers : {},
         error: errorDesc,
       };
     } catch (err: any) {

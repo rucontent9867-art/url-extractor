@@ -133,6 +133,26 @@ export interface CrawlUrlItem {
 
 export type CrawlStatus = 'idle' | 'discovering_sitemaps' | 'crawling' | 'completed' | 'stopped' | 'error';
 
+export type ExcludedAssetCategory =
+  | 'IMAGE'
+  | 'SCRIPT'
+  | 'STYLESHEET'
+  | 'DOCUMENT'
+  | 'VIDEO'
+  | 'FONT'
+  | 'OTHER';
+
+export interface ExcludedAssetItem {
+  id: string;
+  url: string;
+  normalizedUrl: string;
+  category: ExcludedAssetCategory;
+  extension: string;
+  sourcePages: string[];
+  isExternal: boolean;
+  discoveredAt: number;
+}
+
 export interface CrawlStats {
   crawlId: string;
   domain: string;
@@ -146,6 +166,7 @@ export interface CrawlStats {
   currentUrl: string;
   duplicatesRemoved: number;
   assetsIgnored: number;
+  excludedAssetCounts?: Record<ExcludedAssetCategory, number>;
   externalUrlsIgnored: number;
   failedRequests: number;
   languagesDetected: number;
@@ -606,6 +627,9 @@ export interface AssetRecord {
   visible?: boolean;
   details?: string;
   ignoreReason?: string;
+  cdnProvider?: string;
+  isCdn?: boolean;
+  isMixedContent?: boolean;
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
@@ -651,6 +675,10 @@ export interface AssetValidationResult {
   warningCount: number;
   passedCount: number;
   errorCount: number;
+  cdnCount?: number;
+  originCount?: number;
+  mixedContentCount?: number;
+  cdnBreakdown?: Record<string, number>;
   overallStatus: 'passed' | 'warning' | 'error' | 'skipped';
   assets: AssetRecord[];
   items?: AssetRecord[];

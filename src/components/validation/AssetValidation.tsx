@@ -25,6 +25,9 @@ import {
   Link,
   Ban,
   Check,
+  Zap,
+  Globe,
+  Lock,
 } from 'lucide-react';
 import {
   downloadAssetValidationCsv,
@@ -118,9 +121,10 @@ export const AssetValidation: React.FC<AssetValidationProps> = ({
         const matchPage = item.primarySourcePage?.toLowerCase().includes(term);
         const matchFoundOn = item.foundOnPages?.some((p) => p.toLowerCase().includes(term));
         const matchAlt = item.alt?.toLowerCase().includes(term);
+        const matchCdn = item.cdnProvider?.toLowerCase().includes(term);
         const matchErr = item.error?.toLowerCase().includes(term);
         const matchSkip = item.skipReason?.toLowerCase().includes(term);
-        if (!matchAsset && !matchPage && !matchFoundOn && !matchAlt && !matchErr && !matchSkip) {
+        if (!matchAsset && !matchPage && !matchFoundOn && !matchAlt && !matchCdn && !matchErr && !matchSkip) {
           return false;
         }
       }
@@ -201,6 +205,14 @@ export const AssetValidation: React.FC<AssetValidationProps> = ({
     return assetsList.filter((i) => i.status === 'skipped').length;
   }, [assetsList]);
 
+  const cdnAssetsCount = useMemo(() => {
+    return result?.cdnCount ?? assetsList.filter((i) => i.isCdn || !!i.cdnProvider).length;
+  }, [result, assetsList]);
+
+  const mixedContentCount = useMemo(() => {
+    return result?.mixedContentCount ?? assetsList.filter((i) => i.isMixedContent).length;
+  }, [result, assetsList]);
+
   return (
     <div className="space-y-6">
       {/* Top Banner & Actions */}
@@ -254,9 +266,9 @@ export const AssetValidation: React.FC<AssetValidationProps> = ({
         </div>
       </div>
 
-      {/* 13 Summary Metric Cards */}
+      {/* 15 Summary Metric Cards */}
       {result && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 gap-3">
           {/* Card 1: Total Resources */}
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
@@ -398,6 +410,36 @@ export const AssetValidation: React.FC<AssetValidationProps> = ({
               {(result.skippedCount || skippedCount).toLocaleString()}
             </span>
             <span className="text-[10px] text-slate-400 mt-0.5 block">Social & disabled</span>
+          </div>
+
+          {/* Card 14: CDN Delivered */}
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block">
+                CDN Delivered
+              </span>
+              <Zap className="h-3 w-3 text-indigo-500" />
+            </div>
+            <span className="text-lg font-bold text-indigo-700 mt-0.5 block">
+              {cdnAssetsCount.toLocaleString()}
+            </span>
+            <span className="text-[10px] text-slate-400 mt-0.5 block">Edge cached</span>
+          </div>
+
+          {/* Card 15: Mixed Content (Insecure) */}
+          <div className={`p-3.5 rounded-xl border shadow-xs ${mixedContentCount > 0 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-semibold uppercase tracking-wider block ${mixedContentCount > 0 ? 'text-rose-700' : 'text-slate-500'}`}>
+                Mixed Content
+              </span>
+              <Lock className={`h-3 w-3 ${mixedContentCount > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
+            </div>
+            <span className={`text-lg font-bold mt-0.5 block ${mixedContentCount > 0 ? 'text-rose-700' : 'text-slate-900'}`}>
+              {mixedContentCount.toLocaleString()}
+            </span>
+            <span className={`text-[10px] mt-0.5 block ${mixedContentCount > 0 ? 'text-rose-600 font-semibold' : 'text-slate-400'}`}>
+              {mixedContentCount > 0 ? 'HTTP on HTTPS' : 'All secure'}
+            </span>
           </div>
         </div>
       )}
@@ -622,8 +664,24 @@ export const AssetValidation: React.FC<AssetValidationProps> = ({
                           </div>
                         </td>
 
-                        <td className="py-3 px-4 max-w-xs font-mono text-[11px] text-slate-800 truncate" title={item.url}>
-                          {item.url}
+                        <td className="py-3 px-4 max-w-xs font-mono text-[11px] text-slate-800" title={item.url}>
+                          <div className="truncate">{item.url}</div>
+                          {(item.cdnProvider || item.isMixedContent) && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {item.cdnProvider && (
+                                <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-semibold">
+                                  <Zap className="h-2.5 w-2.5 text-indigo-500" />
+                                  <span>{item.cdnProvider}</span>
+                                </span>
+                              )}
+                              {item.isMixedContent && (
+                                <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200 rounded text-[10px] font-semibold">
+                                  <Lock className="h-2.5 w-2.5 text-rose-500" />
+                                  <span>Mixed HTTP</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3 px-4 max-w-xs font-mono text-[11px] text-slate-600">

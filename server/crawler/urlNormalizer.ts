@@ -153,6 +153,53 @@ export function isAssetUrl(pathname: string): boolean {
 }
 
 /**
+ * Categorizes an asset file extension into standard categories:
+ * IMAGE, SCRIPT, STYLESHEET, DOCUMENT, VIDEO, FONT, or OTHER
+ */
+export function getAssetCategory(pathname: string): 'IMAGE' | 'SCRIPT' | 'STYLESHEET' | 'DOCUMENT' | 'VIDEO' | 'FONT' | 'OTHER' {
+  const cleanPath = pathname.split('?')[0].split('#')[0];
+  const lastDot = cleanPath.lastIndexOf('.');
+  if (lastDot === -1) return 'OTHER';
+  const ext = cleanPath.substring(lastDot + 1).toLowerCase();
+
+  // Images
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'ico', 'bmp', 'tiff', 'tif', 'avif', 'eps', 'raw'].includes(ext)) {
+    return 'IMAGE';
+  }
+  // Scripts
+  if (['js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'wasm', 'map'].includes(ext)) {
+    return 'SCRIPT';
+  }
+  // Stylesheets
+  if (['css', 'scss', 'sass', 'less'].includes(ext)) {
+    return 'STYLESHEET';
+  }
+  // Documents & Archives
+  if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'odp', 'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(ext)) {
+    return 'DOCUMENT';
+  }
+  // Media / Video / Audio
+  if (['mp4', 'webm', 'mov', 'avi', 'mp3', 'wav', 'ogg', 'm4a', 'flv', 'wmv', 'mkv', 'aac', 'flac', 'wma', 'm4v'].includes(ext)) {
+    return 'VIDEO';
+  }
+  // Fonts
+  if (['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(ext)) {
+    return 'FONT';
+  }
+  return 'OTHER';
+}
+
+/**
+ * Returns clean lowercase extension without leading dot
+ */
+export function getAssetExtension(pathname: string): string {
+  const cleanPath = pathname.split('?')[0].split('#')[0];
+  const lastDot = cleanPath.lastIndexOf('.');
+  if (lastDot === -1) return '';
+  return cleanPath.substring(lastDot + 1).toLowerCase();
+}
+
+/**
  * Validates whether a URL protocol is valid HTTP/HTTPS and not ignored protocols.
  */
 export function isHttpProtocol(urlStr: string): boolean {

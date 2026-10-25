@@ -5,8 +5,18 @@ import {
   CrawlStatusType,
   CrawlUrlItem,
   StatusCategory,
+  ExcludedAssetItem,
+  ExcludedAssetCategory,
 } from '../../src/types';
-import { normalizeInputUrl, normalizeUrl, hasIgnoredSlug, isAssetUrl } from './urlNormalizer';
+import {
+  normalizeInputUrl,
+  normalizeUrl,
+  hasIgnoredSlug,
+  isAssetUrl,
+  getAssetCategory,
+  getAssetExtension,
+  isSameDomain,
+} from './urlNormalizer';
 import { detectUrlLanguage } from './languageDetector';
 import { getCanonicalPath } from './canonicalPath';
 import { fetchAndParseRobotsTxt } from './robots';
@@ -45,11 +55,67 @@ export class CrawlerSession {
   public visitedUrls: Set<string> = new Set();
   public queue: string[] = [];
 
-  // Dedicated Sets to ensure each duplicate, asset, and external URL is counted ONCE only
+  // Dedicated Sets and Maps to ensure each duplicate, asset, and external URL is tracked accurately
   private duplicateUrlsSet: Set<string> = new Set();
   private assetUrlsSet: Set<string> = new Set();
+  public excludedAssetsMap: Map<string, ExcludedAssetItem> = new Map();
   private externalUrlsSet: Set<string> = new Set();
   private ignoredSlugsSet: Set<string> = new Set();
+
+  public recordExcludedAsset(url: string, sourcePageUrl?: string): void {
+    if (!url || typeof url !== 'string') return;
+    const cleanUrl = url.trim();
+    if (!cleanUrl) return;
+
+    const category = getAssetCategory(cleanUrl);
+    const ext = getAssetExtension(cleanUrl);
+
+    let isExt = false;
+    try {
+      const parsed = new URL(cleanUrl);
+      isExt = !isSameDomain(parsed.hostname, this.hostname, this.settings.includeSubdomains);
+    } catch {
+      isExt = false;
+    }
+
+    if (this.excludedAssetsMap.has(cleanUrl)) {
+      if (sourcePageUrl) {
+        const item = this.excludedAssetsMap.get(cleanUrl)!;
+        if (!item.sourcePages.includes(sourcePageUrl) && item.sourcePages.length < 10) {
+          item.sourcePages.push(sourcePageUrl);
+        }
+      }
+      return;
+    }
+
+    const assetItem: ExcludedAssetItem = {
+      id: `asset-${this.excludedAssetsMap.size + 1}-${Date.now()}`,
+      url: cleanUrl,
+      normalizedUrl: cleanUrl,
+      category,
+      extension: ext,
+      sourcePages: sourcePageUrl ? [sourcePageUrl] : [],
+      isExternal: isExt,
+      discoveredAt: Date.now(),
+    };
+
+    this.excludedAssetsMap.set(cleanUrl, assetItem);
+    this.assetUrlsSet.add(cleanUrl);
+    this.stats.assetsIgnored = this.excludedAssetsMap.size;
+
+    if (!this.stats.excludedAssetCounts) {
+      this.stats.excludedAssetCounts = {
+        IMAGE: 0,
+        SCRIPT: 0,
+        STYLESHEET: 0,
+        DOCUMENT: 0,
+        VIDEO: 0,
+        FONT: 0,
+        OTHER: 0,
+      };
+    }
+    this.stats.excludedAssetCounts[category] = (this.stats.excludedAssetCounts[category] || 0) + 1;
+  }
 
   private isAborted: boolean = false;
   private abortController: AbortController = new AbortController();
@@ -136,6 +202,7 @@ export class CrawlerSession {
       stats: { ...this.stats },
       items: this.discoveredUrls,
       sitemapUrls: this.sitemapUrls,
+      excludedAssets: Array.from(this.excludedAssetsMap.values()),
       createdAt: Date.now(),
     };
     crawlStore.setSession(sessionRecord);
@@ -275,10 +342,7 @@ export class CrawlerSession {
 
     // 4. Check Assets
     if (normalized.isAsset || isAssetUrl(normalized.normalizedUrl)) {
-      if (!this.assetUrlsSet.has(normalized.normalizedUrl)) {
-        this.assetUrlsSet.add(normalized.normalizedUrl);
-        this.stats.assetsIgnored = this.assetUrlsSet.size;
-      }
+      this.recordExcludedAsset(normalized.normalizedUrl, parentUrl);
       return false;
     }
 
@@ -634,10 +698,7 @@ export class CrawlerSession {
   private async crawlSinglePage(targetUrl: string): Promise<void> {
     // Quick extension pre-check before executing network request
     if (isAssetUrl(targetUrl)) {
-      if (!this.assetUrlsSet.has(targetUrl)) {
-        this.assetUrlsSet.add(targetUrl);
-        this.stats.assetsIgnored = this.assetUrlsSet.size;
-      }
+      this.recordExcludedAsset(targetUrl);
       if (this.discoveredUrls.has(targetUrl)) {
         this.discoveredUrls.delete(targetUrl);
         this.stats.uniqueUrlsCount = this.discoveredUrls.size;
@@ -693,10 +754,7 @@ export class CrawlerSession {
 
       // Check non-HTML Content-Type
       if (!fetchResult.isHtml && fetchResult.contentType) {
-        if (!this.assetUrlsSet.has(targetUrl)) {
-          this.assetUrlsSet.add(targetUrl);
-          this.stats.assetsIgnored = this.assetUrlsSet.size;
-        }
+        this.recordExcludedAsset(targetUrl);
         if (this.discoveredUrls.has(targetUrl)) {
           this.discoveredUrls.delete(targetUrl);
           this.stats.uniqueUrlsCount = this.discoveredUrls.size;
@@ -733,10 +791,7 @@ export class CrawlerSession {
             ignoredSlugs: this.ignoredSlugsSet,
           });
           if (normAsset && (normAsset.isAsset || isAssetUrl(normAsset.normalizedUrl))) {
-            if (!this.assetUrlsSet.has(normAsset.normalizedUrl)) {
-              this.assetUrlsSet.add(normAsset.normalizedUrl);
-              this.stats.assetsIgnored = this.assetUrlsSet.size;
-            }
+            this.recordExcludedAsset(normAsset.normalizedUrl, targetUrl);
           }
         }
       }

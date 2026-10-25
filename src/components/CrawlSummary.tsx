@@ -1,6 +1,6 @@
 import React from 'react';
 import { CrawlStats, LanguageInfo } from '../types';
-import { CheckCircle, AlertCircle, RefreshCw, Trash2, Download, Copy, ExternalLink, Clock, Layers, ShieldCheck } from 'lucide-react';
+import { CheckCircle, AlertCircle, RefreshCw, Trash2, Download, Copy, ExternalLink, Clock, Layers, ShieldCheck, FolderArchive } from 'lucide-react';
 import { formatDuration } from '../utils/formatUtils';
 
 interface CrawlSummaryProps {
@@ -10,6 +10,7 @@ interface CrawlSummaryProps {
   onCopyAll: () => void;
   onDownloadCsv: () => void;
   onStartValidation?: () => void;
+  onInspectAssets?: () => void;
   copied: boolean;
 }
 
@@ -20,6 +21,7 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
   onCopyAll,
   onDownloadCsv,
   onStartValidation,
+  onInspectAssets,
   copied,
 }) => {
   const isCompleted = stats.status === 'completed';
@@ -95,10 +97,21 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
             </button>
           )}
 
+          {stats.assetsIgnored > 0 && onInspectAssets && (
+            <button
+              type="button"
+              onClick={onInspectAssets}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-1.5 shadow-2xs cursor-pointer"
+            >
+              <FolderArchive className="h-3.5 w-3.5 text-amber-600" />
+              <span>Inspect {stats.assetsIgnored} Assets</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onCopyAll}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-1.5 shadow-2xs"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-1.5 shadow-2xs cursor-pointer"
           >
             <Copy className="h-3.5 w-3.5" />
             <span>{copied ? 'Copied All!' : 'Copy All URLs'}</span>
@@ -107,7 +120,7 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
           <button
             type="button"
             onClick={onDownloadCsv}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-1.5 shadow-2xs"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors flex items-center space-x-1.5 shadow-2xs cursor-pointer"
           >
             <Download className="h-3.5 w-3.5" />
             <span>Download CSV</span>
@@ -116,7 +129,7 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
           <button
             type="button"
             onClick={onRecrawl}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors flex items-center space-x-1.5 shadow-2xs"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors flex items-center space-x-1.5 shadow-2xs cursor-pointer"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span>Recrawl Website</span>
@@ -125,7 +138,7 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
           <button
             type="button"
             onClick={onClear}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
             title="Clear Results"
           >
             <Trash2 className="h-4 w-4" />
@@ -157,8 +170,23 @@ export const CrawlSummary: React.FC<CrawlSummaryProps> = ({
             </span>
           </div>
 
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[11px] font-medium text-slate-500 uppercase block">Assets Ignored</span>
+          <div
+            onClick={stats.assetsIgnored > 0 ? onInspectAssets : undefined}
+            className={`p-3 rounded-xl border transition-all text-left ${
+              stats.assetsIgnored > 0 && onInspectAssets
+                ? 'bg-slate-50 hover:bg-slate-100/90 border-slate-200 hover:border-slate-300 hover:shadow-xs cursor-pointer group'
+                : 'bg-slate-50 border-slate-200'
+            }`}
+            title={stats.assetsIgnored > 0 ? 'Click to inspect all excluded assets & categories' : undefined}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-slate-500 uppercase block group-hover:text-slate-800">
+                Assets Excluded
+              </span>
+              {stats.assetsIgnored > 0 && onInspectAssets && (
+                <span className="text-[10px] text-blue-600 font-semibold group-hover:underline">Inspect</span>
+              )}
+            </div>
             <span className="text-xl font-bold font-mono text-slate-800 mt-1 block">
               {stats.assetsIgnored.toLocaleString()}
             </span>

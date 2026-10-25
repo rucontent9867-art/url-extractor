@@ -7,6 +7,7 @@ import { LanguageFilter } from './components/LanguageFilter';
 import { ResultsTable } from './components/ResultsTable';
 import { LanguagesDashboard } from './components/LanguagesDashboard';
 import { ValidationDashboard } from './components/validation/ValidationDashboard';
+import { ExcludedAssetsModal } from './components/ExcludedAssetsModal';
 import { CrawlProgressMessage, CrawlSettings, CrawlStats, CrawlUrlItem } from './types';
 import { copyUrlsToClipboard, downloadUrlsAsCsv } from './utils/exportUtils';
 import { Globe, ShieldCheck, ArrowRight, Layers, ListOrdered, Compass, RefreshCw } from 'lucide-react';
@@ -57,6 +58,7 @@ export default function App() {
   const [serverHealthy, setServerHealthy] = useState<boolean | null>(null);
   const [copiedAllFeedback, setCopiedAllFeedback] = useState(false);
   const [activeNavTab, setActiveNavTab] = useState<MainNavTab>('crawler');
+  const [isExcludedAssetsModalOpen, setIsExcludedAssetsModalOpen] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -316,6 +318,7 @@ export default function App() {
                 stats={stats}
                 liveMessage={liveMessage}
                 onStop={handleStopCrawl}
+                onInspectAssets={() => setIsExcludedAssetsModalOpen(true)}
               />
             )}
 
@@ -328,6 +331,7 @@ export default function App() {
                 onCopyAll={handleCopyAll}
                 onDownloadCsv={handleDownloadCsv}
                 onStartValidation={() => setActiveNavTab('validation')}
+                onInspectAssets={() => setIsExcludedAssetsModalOpen(true)}
                 copied={copiedAllFeedback}
               />
             )}
@@ -526,6 +530,16 @@ export default function App() {
           Domain URL Crawler & SEO/Localization Validator • Reusable dataset • Canonical path alignment • Text language verification
         </p>
       </footer>
+
+      {/* Excluded Assets Breakdown Modal */}
+      <ExcludedAssetsModal
+        isOpen={isExcludedAssetsModalOpen}
+        onClose={() => setIsExcludedAssetsModalOpen(false)}
+        crawlId={activeCrawlId}
+        domain={stats.domain}
+        totalExcludedCount={stats.assetsIgnored}
+        onAuditInTool6={() => setActiveNavTab('validation')}
+      />
     </div>
   );
 }

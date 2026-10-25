@@ -11,6 +11,7 @@ export interface StoredCrawlSession {
   stats: CrawlStats;
   items: Map<string, CrawlUrlItem>;
   sitemapUrls: Map<string, DiscoveredSitemapUrl>;
+  excludedAssets?: import('../../src/types').ExcludedAssetItem[];
   validation?: ValidationSummary;
   createdAt: number;
 }

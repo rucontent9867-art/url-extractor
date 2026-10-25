@@ -18,6 +18,9 @@ import {
   ChevronDown,
   ChevronUp,
   Share2,
+  Zap,
+  Lock,
+  Server,
 } from 'lucide-react';
 import { copyTextToClipboard } from '../../utils/exportUtils';
 
@@ -260,7 +263,7 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ item, onClos
           </div>
 
           {/* Key Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
               <span className="text-xs text-slate-500 font-medium block">HTTP Status</span>
               <span
@@ -289,7 +292,36 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ item, onClos
                 <span>{loadTimeMs ? `${loadTimeMs} ms` : isSkipped ? 'Skipped' : 'N/A'}</span>
               </div>
             </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-xs text-slate-500 font-medium block">Delivery / CDN</span>
+              <div className="flex items-center space-x-1.5 text-slate-800 text-sm font-bold mt-0.5">
+                {item.cdnProvider ? (
+                  <>
+                    <Zap className="h-4 w-4 text-indigo-500" />
+                    <span className="text-indigo-700">{item.cdnProvider}</span>
+                  </>
+                ) : (
+                  <>
+                    <Server className="h-4 w-4 text-slate-400" />
+                    <span className="text-slate-600">Origin Server</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Mixed Content Security Warning */}
+          {item.isMixedContent && (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-2.5">
+              <Lock className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold text-rose-900 block text-xs">Insecure Mixed Content Detected</span>
+                <p className="text-rose-700 text-xs mt-0.5">
+                  This resource is requested over unencrypted HTTP (<code className="bg-rose-100 px-1 py-0.5 rounded">http://</code>) while referenced on a secure HTTPS page. Modern browsers block or warn against mixed passive/active content.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Alt Text Analysis (For Images) */}
           {item.assetType === 'IMAGE' && (

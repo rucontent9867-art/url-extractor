@@ -292,6 +292,7 @@ crawlRouter.get('/crawl/results/:crawlId', (req, res) => {
       crawlId: session.crawlId,
       stats: session.stats,
       items: Array.from(session.discoveredUrls.values()),
+      excludedAssetsCount: session.excludedAssetsMap.size,
     });
   }
 
@@ -301,6 +302,38 @@ crawlRouter.get('/crawl/results/:crawlId', (req, res) => {
       crawlId: stored.crawlId,
       stats: stored.stats,
       items: Array.from(stored.items.values()),
+      excludedAssetsCount: stored.excludedAssets ? stored.excludedAssets.length : stored.stats.assetsIgnored,
+    });
+  }
+
+  return res.status(404).json({ error: 'Crawl session not found' });
+});
+
+// Fetch discovered excluded assets with category breakdown
+crawlRouter.get('/crawl/excluded-assets/:crawlId', (req, res) => {
+  const { crawlId } = req.params;
+  const session = crawlerManager.getSession(crawlId);
+
+  if (session) {
+    const assets = Array.from(session.excludedAssetsMap.values());
+    return res.json({
+      crawlId: session.crawlId,
+      domain: session.rawInput,
+      total: assets.length,
+      counts: session.stats.excludedAssetCounts || {},
+      items: assets,
+    });
+  }
+
+  const stored = crawlStore.getSession(crawlId);
+  if (stored) {
+    const assets = stored.excludedAssets || [];
+    return res.json({
+      crawlId: stored.crawlId,
+      domain: stored.domain,
+      total: assets.length,
+      counts: stored.stats.excludedAssetCounts || {},
+      items: assets,
     });
   }
 

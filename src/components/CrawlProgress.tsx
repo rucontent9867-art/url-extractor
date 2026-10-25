@@ -6,9 +6,10 @@ interface CrawlProgressProps {
   stats: CrawlStats;
   liveMessage?: string;
   onStop: () => void;
+  onInspectAssets?: () => void;
 }
 
-export const CrawlProgress: React.FC<CrawlProgressProps> = ({ stats, liveMessage, onStop }) => {
+export const CrawlProgress: React.FC<CrawlProgressProps> = ({ stats, liveMessage, onStop, onInspectAssets }) => {
   const isSitemapping = stats.status === 'discovering_sitemaps';
   const isCrawling = stats.status === 'crawling';
 
@@ -110,12 +111,25 @@ export const CrawlProgress: React.FC<CrawlProgressProps> = ({ stats, liveMessage
           <span className="font-semibold text-slate-800 font-mono">{stats.duplicatesRemoved}</span>
         </div>
 
-        <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 text-slate-600 border border-slate-100">
+        <div
+          onClick={stats.assetsIgnored > 0 ? onInspectAssets : undefined}
+          className={`flex items-center justify-between p-2 rounded-lg border transition-all ${
+            stats.assetsIgnored > 0 && onInspectAssets
+              ? 'bg-slate-50 hover:bg-slate-100/90 text-slate-700 border-slate-200 hover:border-slate-300 cursor-pointer shadow-2xs group'
+              : 'bg-slate-50 text-slate-600 border-slate-100'
+          }`}
+          title={stats.assetsIgnored > 0 ? 'Click to inspect all excluded assets & categories' : undefined}
+        >
           <span className="flex items-center space-x-1">
-            <Ban className="h-3 w-3 text-slate-400" />
-            <span>Assets Excluded</span>
+            <Ban className="h-3 w-3 text-slate-400 group-hover:text-slate-800" />
+            <span className="group-hover:underline">Assets Excluded</span>
           </span>
-          <span className="font-semibold text-slate-800 font-mono">{stats.assetsIgnored}</span>
+          <span className="font-semibold text-slate-800 font-mono flex items-center gap-1">
+            <span>{stats.assetsIgnored}</span>
+            {stats.assetsIgnored > 0 && onInspectAssets && (
+              <span className="text-[10px] text-blue-600 font-normal hidden group-hover:inline">Inspect</span>
+            )}
+          </span>
         </div>
 
         <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 text-slate-600 border border-slate-100">
