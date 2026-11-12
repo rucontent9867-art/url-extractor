@@ -4,6 +4,7 @@ import { normalizeInputUrl } from '../crawler/urlNormalizer';
 import { crawlStore } from '../services/crawlStore';
 import { settingsStore } from '../services/settingsStore';
 import { domainSettingsStore } from '../services/domainSettingsStore';
+import { createDemoCrawlSession } from '../services/demoDataset';
 
 export const crawlRouter = Router();
 
@@ -339,3 +340,51 @@ crawlRouter.get('/crawl/excluded-assets/:crawlId', (req, res) => {
 
   return res.status(404).json({ error: 'Crawl session not found' });
 });
+
+// Seed or retrieve demo dataset for immediate pre-crawl tool exploration
+crawlRouter.post('/crawl/demo', (req, res) => {
+  try {
+    const demoSession = createDemoCrawlSession();
+    crawlStore.setSession(demoSession);
+    if (demoSession.validation) {
+      crawlStore.setValidation(demoSession.crawlId, demoSession.validation);
+    }
+
+    return res.json({
+      success: true,
+      crawlId: demoSession.crawlId,
+      domain: demoSession.domain,
+      stats: demoSession.stats,
+      items: Array.from(demoSession.items.values()),
+      validation: demoSession.validation,
+      excludedAssetsCount: demoSession.excludedAssets?.length || 0,
+    });
+  } catch (err: any) {
+    console.error('Failed to create demo session:', err);
+    return res.status(500).json({ error: err.message || 'Failed to create demo session' });
+  }
+});
+
+crawlRouter.get('/crawl/demo', (req, res) => {
+  try {
+    const demoSession = createDemoCrawlSession();
+    crawlStore.setSession(demoSession);
+    if (demoSession.validation) {
+      crawlStore.setValidation(demoSession.crawlId, demoSession.validation);
+    }
+
+    return res.json({
+      success: true,
+      crawlId: demoSession.crawlId,
+      domain: demoSession.domain,
+      stats: demoSession.stats,
+      items: Array.from(demoSession.items.values()),
+      validation: demoSession.validation,
+      excludedAssetsCount: demoSession.excludedAssets?.length || 0,
+    });
+  } catch (err: any) {
+    console.error('Failed to create demo session:', err);
+    return res.status(500).json({ error: err.message || 'Failed to create demo session' });
+  }
+});
+

@@ -11,6 +11,7 @@ import {
   VisualValidationOptions,
   InteractionValidationOptions,
   ValidationSummary,
+  LinkHealthResult,
 } from '../../src/types';
 import { crawlStore, StoredCrawlSession } from './crawlStore';
 import { validateSitemap } from '../validators/sitemapValidator';
@@ -21,10 +22,37 @@ import { validateAmp, AmpValidationOptions } from '../validators/ampValidator';
 import { assetValidator } from '../validators/assetValidator';
 import { visualValidator } from '../validators/visualValidator';
 import { interactionValidator } from '../validators/interactionValidator';
+import { validateLinkHealthForSession, validateLinkHealthForUrls } from '../validators/linkHealthValidator';
 import { getEffectiveIgnoredSlugs } from './settingsStore';
 import { hasIgnoredSlug } from '../crawler/urlNormalizer';
 
 export class ValidationService {
+  public async validateLinkHealthOnly(crawlId: string): Promise<LinkHealthResult> {
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      throw new Error(`Crawl session ${crawlId} not found in store`);
+    }
+
+    const linkHealthResult = await validateLinkHealthForSession(session);
+
+    const existing = crawlStore.getValidation(crawlId) || {
+      crawlId,
+      timestamp: Date.now(),
+      overallStatus: 'not_run',
+    };
+    existing.linkHealth = linkHealthResult;
+    existing.overallStatus = this.calculateOverallStatus(existing);
+    crawlStore.setValidation(crawlId, existing);
+
+    this.annotateSessionItems(session, existing);
+
+    return linkHealthResult;
+  }
+
+  public async validateLinkHealthForDirectUrls(urls: string[]): Promise<LinkHealthResult> {
+    return validateLinkHealthForUrls(urls);
+  }
+
   public validateSitemapOnly(crawlId: string): SitemapValidationResult {
     const session = crawlStore.getSession(crawlId);
     if (!session) {
@@ -237,6 +265,7 @@ export class ValidationService {
     const sitemap = validateSitemap(session);
     const completeness = validateLanguageCompleteness(session);
     const contentLanguage = validateContentLanguage(session, confidenceThreshold);
+    const linkHealth = await validateLinkHealthForSession(session);
 
     // 1. Run static and network-only validators concurrently
     const [assetRes, ampRes] = await Promise.allSettled([
@@ -285,6 +314,7 @@ export class ValidationService {
     const summary: ValidationSummary = {
       crawlId,
       timestamp: Date.now(),
+      linkHealth,
       sitemap,
       completeness,
       contentLanguage,
@@ -361,6 +391,21 @@ export class ValidationService {
   ): 'passed' | 'warning' | 'error' {
     let hasError = false;
     let hasWarning = false;
+
+    if (val.linkHealth) {
+      if (val.linkHealth.brokenInternalCount > 0) {
+        hasError = true;
+      }
+      if (
+        val.linkHealth.brokenExternalCount > 0 ||
+        val.linkHealth.redirectChainCount > 0 ||
+        val.linkHealth.placeholderCount > 0 ||
+        val.linkHealth.emptyAnchorCount > 0 ||
+        val.linkHealth.brokenAnchorCount > 0
+      ) {
+        hasWarning = true;
+      }
+    }
 
     if (val.sitemap) {
       if (val.sitemap.missingFromSitemap > 0) {

@@ -7,6 +7,7 @@ import {
   StatusCategory,
   ExcludedAssetItem,
   ExcludedAssetCategory,
+  CrawledAnchorLink,
 } from '../../src/types';
 import {
   normalizeInputUrl,
@@ -49,6 +50,10 @@ export class CrawlerSession {
   // Final unique webpage URLs
   public discoveredUrls: Map<string, CrawlUrlItem> = new Map();
   public sitemapUrls: Map<string, DiscoveredSitemapUrl> = new Map();
+
+  // Link-health inventory captured during crawl parsing (avoids re-downloading HTML)
+  public anchorInventory: Map<string, CrawledAnchorLink[]> = new Map();
+  public anchorIdIndex: Map<string, string[]> = new Map();
 
   // Unified single normalized URL Set for: queued URLs, visited URLs, discovered URLs
   public knownUrls: Set<string> = new Set();
@@ -202,6 +207,8 @@ export class CrawlerSession {
       stats: { ...this.stats },
       items: this.discoveredUrls,
       sitemapUrls: this.sitemapUrls,
+      anchorInventory: this.anchorInventory,
+      anchorIdIndex: this.anchorIdIndex,
       excludedAssets: Array.from(this.excludedAssetsMap.values()),
       createdAt: Date.now(),
     };
@@ -781,6 +788,12 @@ export class CrawlerSession {
         currentItem.amphtmlUrl = parsed.amphtmlUrl;
         currentItem.canonicalUrl = parsed.canonicalUrl;
         currentItem.hreflangMap = parsed.hreflangMap;
+      }
+
+      // Retain anchors + in-page ids for deep link-health auditing
+      if (this.anchorInventory.size < 25000) {
+        this.anchorInventory.set(targetUrl, parsed.anchors);
+        this.anchorIdIndex.set(targetUrl, parsed.anchorIds);
       }
 
       // Process asset links discovered on the page

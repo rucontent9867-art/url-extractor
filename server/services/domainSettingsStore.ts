@@ -45,6 +45,7 @@ export function createDefaultTool6Settings(): Tool6Settings {
 }
 
 const VALID_TOOLS: ValidationToolId[] = [
+  'linkHealth',
   'sitemap',
   'languageCompleteness',
   'contentLanguage',
@@ -197,6 +198,7 @@ function createDefaultDomainSettings(domain: string, initialGlobalSlugs?: string
       rules: globalRules,
     },
     tools: {
+      linkHealth: createEmptyToolExclusions(),
       sitemap: createEmptyToolExclusions(),
       languageCompleteness: createEmptyToolExclusions(),
       contentLanguage: createEmptyToolExclusions(),
@@ -287,6 +289,7 @@ class DomainSettingsStore {
       : globalSlugs.map((s) => ({ type: 'slug', value: normalizeSlug(s).formatted, createdAt: Date.now() }));
 
     const toolsData: Record<ValidationToolId, DomainToolExclusions> = {
+      linkHealth: createEmptyToolExclusions(),
       sitemap: createEmptyToolExclusions(),
       languageCompleteness: createEmptyToolExclusions(),
       contentLanguage: createEmptyToolExclusions(),

@@ -10,6 +10,7 @@ import {
   AssetValidationResult,
   VisualValidationResult,
   InteractionValidationResult,
+  LinkHealthResult,
 } from '../../types';
 import { ValidationSummaryCard } from './ValidationSummaryCard';
 import { SitemapValidation } from './SitemapValidation';
@@ -20,6 +21,7 @@ import { AmpValidation } from './AmpValidation';
 import { AssetValidation } from './AssetValidation';
 import { VisualValidation } from './VisualValidation';
 import { InteractionValidation } from './InteractionValidation';
+import { LinkHealthValidation } from './LinkHealthValidation';
 import {
   ShieldCheck,
   Layers,
@@ -29,8 +31,11 @@ import {
   FileCheck2,
   Eye,
   MousePointerClick,
+  Link2,
   AlertCircle,
   X,
+  Sparkles,
+  Compass,
 } from 'lucide-react';
 import { fetchJson } from '../../utils/apiUtils';
 
@@ -38,16 +43,36 @@ interface ValidationDashboardProps {
   crawlId: string | null;
   crawlStats: CrawlStats | null;
   onValidationComplete?: () => void;
+  onLoadDemoData?: () => void;
+  onSelectNavTab?: (tab: any) => void;
+  initialTab?: string;
 }
 
 export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   crawlId,
   crawlStats,
   onValidationComplete,
+  onLoadDemoData,
+  onSelectNavTab,
+  initialTab,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'sitemap' | 'completeness' | 'content' | 'header' | 'amp' | 'asset' | 'visual' | 'interaction'
-  >('sitemap');
+    | 'linkhealth'
+    | 'sitemap'
+    | 'completeness'
+    | 'content'
+    | 'header'
+    | 'amp'
+    | 'asset'
+    | 'visual'
+    | 'interaction'
+  >((initialTab as any) || 'sitemap');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab as any);
+    }
+  }, [initialTab]);
   const [summary, setSummary] = useState<ValidationSummary | null>(null);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [isSitemapLoading, setIsSitemapLoading] = useState(false);
@@ -58,6 +83,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   const [isAssetLoading, setIsAssetLoading] = useState(false);
   const [isVisualLoading, setIsVisualLoading] = useState(false);
   const [isInteractionLoading, setIsInteractionLoading] = useState(false);
+  const [isLinkHealthLoading, setIsLinkHealthLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Fetch initial validation results if session exists
@@ -92,6 +118,32 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
       setErrorMessage(err.message || 'Error running validation checks');
     } finally {
       setIsRunningAll(false);
+    }
+  };
+
+  const handleRunLinkHealth = async () => {
+    if (!crawlId) return;
+    setIsLinkHealthLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const data = await fetchJson<{ linkHealth: LinkHealthResult }>(
+        `/api/validation/link-health/${crawlId}`,
+        { method: 'POST' }
+      );
+
+      setSummary((prev) => ({
+        crawlId,
+        timestamp: Date.now(),
+        overallStatus: prev?.overallStatus || 'passed',
+        ...prev,
+        linkHealth: data.linkHealth,
+      }));
+      onValidationComplete?.();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Error auditing link & URL health');
+    } finally {
+      setIsLinkHealthLoading(false);
     }
   };
 
@@ -310,26 +362,54 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     }
   };
 
-  if (!crawlId || !crawlStats || crawlStats.status === 'idle') {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
-        <div className="max-w-md mx-auto space-y-3">
-          <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-500">
-            <ShieldCheck className="h-6 w-6" />
-          </div>
-          <h3 className="text-base font-bold text-slate-900">No Active Crawl Dataset</h3>
-          <p className="text-xs text-slate-500">
-            Please crawl a website first in Stage 1. Once crawled, all 8 automated validation tools (Sitemap Coverage,
-            Language Completeness, Content Verification, Navigation Switches, AMP Parity, Asset Health, Viewport Testing, and Interactive Controls) will instantly analyze the discovered
-            dataset.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const isPreCrawl = !crawlId || !crawlStats || crawlStats.status === 'idle';
 
   return (
     <div className="space-y-6">
+      {/* Pre-Crawl Welcome Banner */}
+      {isPreCrawl && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl border border-slate-700/80 p-5 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0 shadow-inner">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h4 className="text-sm font-bold text-white">Pre-Crawl Validation Explorer</h4>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  All 9 Tools Accessible
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5 max-w-2xl leading-relaxed">
+                You can explore each validation tool below, configure exclusion rules, or load demo data to view live matrices, AMP diffs, and responsive reports immediately.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0">
+            {onLoadDemoData && (
+              <button
+                type="button"
+                onClick={onLoadDemoData}
+                className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+              >
+                <Zap className="h-3.5 w-3.5 fill-slate-950" />
+                <span>Load Sample Data</span>
+              </button>
+            )}
+            {onSelectNavTab && (
+              <button
+                type="button"
+                onClick={() => onSelectNavTab('crawler')}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center space-x-1.5 transition-all cursor-pointer"
+              >
+                <Compass className="h-3.5 w-3.5" />
+                <span>Launch Crawler</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {errorMessage && (
         <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -356,7 +436,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
 
       {/* Validation Navigation Tabs - All displayed on screen without horizontal scroll */}
       <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full shadow-2xs">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-1.5 w-full">
           {/* Tab 1: English URLs vs. Sitemap */}
           <button
             type="button"
@@ -646,10 +726,60 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
               }`}
             />
           </button>
+
+          {/* Tab 9: Link & URL Health */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('linkhealth')}
+            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
+              activeTab === 'linkhealth'
+                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
+            }`}
+          >
+            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
+              <Link2 className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'linkhealth' ? 'text-slate-900' : 'text-slate-500'}`} />
+              <span className="truncate text-[11px] sm:text-xs">9. Link Health</span>
+            </div>
+            {summary?.linkHealth ? (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
+                  summary.linkHealth.overallStatus === 'passed'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : summary.linkHealth.overallStatus === 'warning'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-rose-100 text-rose-800'
+                }`}
+              >
+                {summary.linkHealth.overallStatus === 'passed'
+                  ? 'Pass'
+                  : summary.linkHealth.brokenInternalCount + summary.linkHealth.brokenExternalCount > 0
+                  ? `${summary.linkHealth.brokenInternalCount + summary.linkHealth.brokenExternalCount} Broken`
+                  : `${summary.linkHealth.items.length} Issue`}
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
+            )}
+            <span
+              className={`h-0.5 w-6 rounded-full transition-all ${
+                activeTab === 'linkhealth' ? 'bg-slate-900' : 'bg-transparent'
+              }`}
+            />
+          </button>
         </div>
       </div>
 
       {/* Tab Panels */}
+      {activeTab === 'linkhealth' && (
+        <LinkHealthValidation
+          result={summary?.linkHealth || null}
+          isLoading={isLinkHealthLoading || isRunningAll}
+          crawlId={crawlId}
+          domain={crawlStats?.domain || ''}
+          onRunValidation={handleRunLinkHealth}
+        />
+      )}
+
       {activeTab === 'sitemap' && (
         <SitemapValidation
           result={summary?.sitemap || null}

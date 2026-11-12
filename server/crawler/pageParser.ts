@@ -1,5 +1,9 @@
 import * as cheerio from 'cheerio';
 import { normalizeHreflangCode, detectUnicodeScript } from '../../src/utils/canonicalLanguage';
+import { AnchorType, CrawledAnchorLink } from '../../src/types';
+
+/** Upper bound of anchors retained per page for link-health auditing */
+export const MAX_ANCHORS_PER_PAGE = 250;
 
 export interface StaticContentBlock {
   type: 'heading' | 'paragraph' | 'list_item' | 'cta' | 'navigation' | 'footer' | 'meta' | 'other';
@@ -24,6 +28,8 @@ export interface ParsedPageRecord {
   headerLinks: string[];
   hasLanguageSelector: boolean;
   languageSelectorOptions: Array<{ text: string; code?: string; href?: string }>;
+  anchors: CrawledAnchorLink[];
+  anchorIds: string[];
 }
 
 export interface ParsePageOptions {
@@ -82,6 +88,17 @@ const DEFAULT_DYNAMIC_SELECTORS = [
 export function parseHtmlPage(html: string, options: ParsePageOptions): ParsedPageRecord {
   const $ = cheerio.load(html, { xml: false });
   const baseUrl = options.baseUrl;
+
+  // <base href> changes how every relative anchor resolves
+  let anchorBaseUrl = baseUrl;
+  const documentBase = $('base[href]').first().attr('href')?.trim();
+  if (documentBase) {
+    try {
+      anchorBaseUrl = new URL(documentBase, baseUrl).toString();
+    } catch {
+      anchorBaseUrl = baseUrl;
+    }
+  }
 
   // 1. Meta & Titles
   const title = $('title').text().replace(/\s+/g, ' ').trim() || '';
@@ -252,6 +269,75 @@ export function parseHtmlPage(html: string, options: ParsePageOptions): ParsedPa
   });
   const assetLinks: string[] = Array.from(assetLinksSet);
 
+  // 7b. Anchor inventory + in-page target index for Link & URL Health auditing.
+  // Extracted before dynamic stripping so icon links (SVG/img) keep their semantics.
+  const anchorIdsSet = new Set<string>();
+  $('[id]').each((_, el) => {
+    const id = $(el).attr('id')?.trim();
+    if (id && id.length <= 120) anchorIdsSet.add(id);
+  });
+  $('a[name]').each((_, el) => {
+    const name = $(el).attr('name')?.trim();
+    if (name && name.length <= 120) anchorIdsSet.add(name);
+  });
+
+  const anchors: CrawledAnchorLink[] = [];
+  $('a[href], area[href]').each((_, el) => {
+    if (anchors.length >= MAX_ANCHORS_PER_PAGE) return;
+
+    const rawHref = ($(el).attr('href') || '').trim();
+    const text = $(el).text().replace(/\s+/g, ' ').trim().slice(0, 160);
+    const ariaLabel = ($(el).attr('aria-label') || '').trim();
+    const titleAttr = ($(el).attr('title') || '').trim();
+    // <area alt="..."> is the image-map equivalent of anchor text
+    const elementAlt = ($(el).attr('alt') || '').trim();
+    const imgAlt = $(el).find('img[alt]').first().attr('alt')?.trim() || '';
+    const svgTitle = $(el).find('svg title').first().text().trim();
+    const hasImage = $(el).find('img').length > 0;
+    const hasSvg = $(el).find('svg').length > 0;
+
+    let anchorType: AnchorType = 'text';
+    if (!text && !ariaLabel && !titleAttr && !elementAlt && !imgAlt && !svgTitle) {
+      anchorType = 'empty';
+    } else if (hasImage) {
+      anchorType = 'image';
+    } else if (hasSvg) {
+      anchorType = 'svg';
+    }
+
+    const effectiveText =
+      text ||
+      ariaLabel ||
+      titleAttr ||
+      elementAlt ||
+      (imgAlt ? `[Img: ${imgAlt}]` : '') ||
+      (svgTitle ? `[SVG: ${svgTitle}]` : '') ||
+      '(Empty Link)';
+
+    let resolvedUrl = rawHref;
+    let inPageTargetId: string | undefined;
+
+    if (rawHref) {
+      try {
+        resolvedUrl = new URL(rawHref, anchorBaseUrl).toString();
+      } catch {
+        resolvedUrl = rawHref;
+      }
+
+      const hashIndex = rawHref.indexOf('#');
+      if (hashIndex !== -1 && hashIndex < rawHref.length - 1) {
+        const rawId = rawHref.substring(hashIndex + 1);
+        try {
+          inPageTargetId = decodeURIComponent(rawId);
+        } catch {
+          inPageTargetId = rawId;
+        }
+      }
+    }
+
+    anchors.push({ rawHref, resolvedUrl, text: effectiveText, anchorType, inPageTargetId });
+  });
+
   // 8. Measure and strip dynamic / boilerplate elements for clean content analysis
   let dynamicCharsIgnored = 0;
   const allDynamicSelectors = [
@@ -345,5 +431,7 @@ export function parseHtmlPage(html: string, options: ParsePageOptions): ParsedPa
     headerLinks,
     hasLanguageSelector,
     languageSelectorOptions,
+    anchors,
+    anchorIds: Array.from(anchorIdsSet),
   };
 }

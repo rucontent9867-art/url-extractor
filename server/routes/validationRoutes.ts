@@ -4,6 +4,58 @@ import { crawlStore } from '../services/crawlStore';
 
 export const validationRouter = Router();
 
+// Validate Link & URL Health for Direct URLs (Instant / Ad-hoc Mode)
+// Registered before the :crawlId variant so "direct" is never treated as a session id
+validationRouter.post('/validation/link-health/direct', async (req, res) => {
+  const { urls, url } = req.body || {};
+  let targetUrls: string[] = [];
+
+  if (Array.isArray(urls)) {
+    targetUrls = urls.filter((u): u is string => typeof u === 'string');
+  } else if (typeof urls === 'string') {
+    targetUrls = urls.split(/[\r\n,]+/);
+  } else if (typeof url === 'string') {
+    targetUrls = [url];
+  }
+
+  targetUrls = targetUrls.map((u) => u.trim()).filter(Boolean);
+
+  if (targetUrls.length === 0) {
+    return res.status(400).json({ error: 'Please provide at least one valid URL to audit.' });
+  }
+  if (targetUrls.length > 50) {
+    return res.status(400).json({ error: 'A maximum of 50 URLs can be audited per run.' });
+  }
+
+  try {
+    const result = await validationService.validateLinkHealthForDirectUrls(targetUrls);
+    return res.json({ success: true, linkHealth: result });
+  } catch (err: any) {
+    const status = typeof err?.statusCode === 'number' ? err.statusCode : 500;
+    if (status >= 500) {
+      console.error('Direct link health validation error:', err);
+    }
+    return res.status(status).json({ error: err.message || 'Direct link health validation failed' });
+  }
+});
+
+// Validate Link & URL Health (Whole Crawl Session Mode)
+validationRouter.post('/validation/link-health/:crawlId', async (req, res) => {
+  try {
+    const { crawlId } = req.params;
+    const session = crawlStore.getSession(crawlId);
+    if (!session) {
+      return res.status(404).json({ error: 'Crawl session not found. Please run a crawl first.' });
+    }
+
+    const result = await validationService.validateLinkHealthOnly(crawlId);
+    return res.json({ success: true, crawlId, linkHealth: result });
+  } catch (err: any) {
+    console.error('Link health validation error:', err);
+    return res.status(500).json({ error: err.message || 'Link health validation failed' });
+  }
+});
+
 // Validate Sitemap Coverage
 validationRouter.post('/validation/sitemap/:crawlId', (req, res) => {
   try {

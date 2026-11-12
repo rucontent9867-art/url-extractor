@@ -11,6 +11,10 @@ export interface StoredCrawlSession {
   stats: CrawlStats;
   items: Map<string, CrawlUrlItem>;
   sitemapUrls: Map<string, DiscoveredSitemapUrl>;
+  /** pageUrl -> anchors extracted while crawling (full-site link health) */
+  anchorInventory?: Map<string, import('../../src/types').CrawledAnchorLink[]>;
+  /** pageUrl -> element ids / anchor names present on the page */
+  anchorIdIndex?: Map<string, string[]>;
   excludedAssets?: import('../../src/types').ExcludedAssetItem[];
   validation?: ValidationSummary;
   createdAt: number;

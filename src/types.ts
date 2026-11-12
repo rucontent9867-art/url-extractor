@@ -16,6 +16,7 @@ export interface CrawlSettings {
 // ---------------- EXCLUSIONS & TOOL-SPECIFIC SETTINGS ----------------
 
 export type ValidationToolId =
+  | 'linkHealth'
   | 'sitemap'
   | 'languageCompleteness'
   | 'contentLanguage'
@@ -52,6 +53,7 @@ export interface DomainSettings {
   domain: string;
   global: DomainGlobalExclusions;
   tools: {
+    linkHealth?: DomainToolExclusions;
     sitemap: DomainToolExclusions;
     languageCompleteness: DomainToolExclusions;
     contentLanguage: DomainToolExclusions;
@@ -322,9 +324,87 @@ export interface ContentLanguageResult {
   ignoredUrls?: string[];
 }
 
+// ---------------- LINK & URL HEALTH TYPES ----------------
+
+export type LinkHealthIssueType =
+  | 'broken_internal'
+  | 'broken_external'
+  | 'redirect_chain'
+  | 'redirect_loop'
+  | 'double_slash'
+  | 'placeholder'
+  | 'broken_anchor'
+  | 'empty_anchor'
+  | 'tracking_param'
+  | 'healthy';
+
+export type LinkSeverity = 'critical' | 'warning' | 'info' | 'healthy';
+
+export type AnchorType = 'text' | 'image' | 'svg' | 'empty' | 'button';
+
+/** Retained at crawl time so full-site link audits never re-download HTML */
+export interface CrawledAnchorLink {
+  rawHref: string;
+  resolvedUrl: string;
+  text: string;
+  anchorType: AnchorType;
+  inPageTargetId?: string;
+}
+
+export interface RedirectHop {
+  url: string;
+  statusCode: number;
+}
+
+export interface LinkHealthItem {
+  id: string;
+  sourceUrl: string;
+  sourceTitle?: string;
+  targetUrl: string;
+  rawHref: string;
+  anchorText: string;
+  anchorType: AnchorType;
+  issueType: LinkHealthIssueType;
+  severity: LinkSeverity;
+  statusCode?: number;
+  finalDestinationUrl?: string;
+  redirectHops?: number;
+  redirectChain?: RedirectHop[];
+  isInternal: boolean;
+  domElementSnippet?: string;
+  details?: string;
+  recommendation: string;
+}
+
+export interface LinkHealthResult {
+  totalLinksScanned: number;
+  pagesScanned: number;
+  brokenInternalCount: number;
+  brokenExternalCount: number;
+  redirectCount: number;
+  redirectChainCount: number;
+  placeholderCount: number;
+  emptyAnchorCount: number;
+  brokenAnchorCount: number;
+  trackingParamCount: number;
+  doubleSlashCount: number;
+  healthyCount: number;
+  /** Links whose destination could not be verified (budget/blocked) — never counted as broken */
+  unverifiedCount?: number;
+  /** True when the findings list was capped; counters above remain complete */
+  itemsTruncated?: boolean;
+  healthScore: number;
+  overallStatus: 'passed' | 'warning' | 'error';
+  items: LinkHealthItem[];
+  durationMs?: number;
+  timestamp: number;
+  auditMode?: 'crawl_session' | 'direct_urls';
+}
+
 export interface ValidationSummary {
   crawlId: string;
   timestamp: number;
+  linkHealth?: LinkHealthResult;
   sitemap?: SitemapValidationResult;
   completeness?: LanguageCompletenessResult;
   contentLanguage?: ContentLanguageResult;

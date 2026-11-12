@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Header, MainNavTab } from './components/Header';
+import { ToolsHub } from './components/ToolsHub';
 import { CrawlForm } from './components/CrawlForm';
 import { CrawlProgress } from './components/CrawlProgress';
 import { CrawlSummary } from './components/CrawlSummary';
@@ -10,7 +11,7 @@ import { ValidationDashboard } from './components/validation/ValidationDashboard
 import { ExcludedAssetsModal } from './components/ExcludedAssetsModal';
 import { CrawlProgressMessage, CrawlSettings, CrawlStats, CrawlUrlItem } from './types';
 import { copyUrlsToClipboard, downloadUrlsAsCsv } from './utils/exportUtils';
-import { Globe, ShieldCheck, ArrowRight, Layers, ListOrdered, Compass, RefreshCw } from 'lucide-react';
+import { Globe, ShieldCheck, ArrowRight, Layers, ListOrdered, Compass, RefreshCw, LayoutGrid, Sparkles, Zap } from 'lucide-react';
 import { fetchJson } from './utils/apiUtils';
 
 const DEFAULT_SETTINGS: CrawlSettings = {
@@ -57,7 +58,9 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [serverHealthy, setServerHealthy] = useState<boolean | null>(null);
   const [copiedAllFeedback, setCopiedAllFeedback] = useState(false);
-  const [activeNavTab, setActiveNavTab] = useState<MainNavTab>('crawler');
+  const [activeNavTab, setActiveNavTab] = useState<MainNavTab>('tools_hub');
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [targetValidationTab, setTargetValidationTab] = useState<string | undefined>(undefined);
   const [isExcludedAssetsModalOpen, setIsExcludedAssetsModalOpen] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -234,6 +237,30 @@ export default function App() {
     }
   };
 
+  const handleLoadDemo = async () => {
+    try {
+      setErrorMessage('');
+      setLiveMessage('Loading interactive sample dataset...');
+      const data = await fetchJson<{
+        crawlId: string;
+        stats: CrawlStats;
+        items: CrawlUrlItem[];
+        domain: string;
+      }>('/api/crawl/demo', { method: 'POST' });
+
+      if (data && data.crawlId) {
+        setActiveCrawlId(data.crawlId);
+        setStats(data.stats);
+        setItems(data.items);
+        setIsDemoMode(true);
+        setLiveMessage('Sample dataset loaded! You can now explore all 12 tools.');
+      }
+    } catch (err: any) {
+      console.error('Failed to load demo data:', err);
+      setErrorMessage('Could not load sample data: ' + err.message);
+    }
+  };
+
   const handleClear = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -245,7 +272,8 @@ export default function App() {
     setSelectedLanguage('all');
     setLiveMessage('');
     setErrorMessage('');
-    setActiveNavTab('crawler');
+    setIsDemoMode(false);
+    setActiveNavTab('tools_hub');
   };
 
   const handleRecrawl = () => {
@@ -290,12 +318,60 @@ export default function App() {
         onSelectTab={setActiveNavTab}
         totalUrls={items.length}
         languagesCount={stats.languagesDetected}
+        isDemoMode={isDemoMode}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {/* TAB 0: ALL TOOLS HUB */}
+        {activeNavTab === 'tools_hub' && (
+          <ToolsHub
+            onSelectNavTab={setActiveNavTab}
+            onOpenValidationTool={(tab) => {
+              setTargetValidationTab(tab);
+              setActiveNavTab('validation');
+            }}
+            onLoadDemoData={handleLoadDemo}
+            onResetSession={handleClear}
+            hasActiveData={items.length > 0}
+            activeDomain={stats.domain}
+            totalUrlsCount={items.length}
+          />
+        )}
+
         {/* TAB 1: CRAWLER */}
         {activeNavTab === 'crawler' && (
           <div className="space-y-6">
+            {/* Quick banner to see tools or load sample data */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <div className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shrink-0 border border-emerald-200">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div className="text-xs">
+                  <span className="font-bold text-slate-900 block">Want to inspect all 12 tools before running a crawl?</span>
+                  <span className="text-slate-500">Explore link & URL health, sitemaps, translation completeness matrix, AMP mobile parity, and responsive layout audits.</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveNavTab('tools_hub')}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5 text-slate-600" />
+                  <span>View All Tools</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLoadDemo}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  <span>Load Sample Data</span>
+                </button>
+              </div>
+            </div>
+
             {/* URL Input and Launch Form */}
             <CrawlForm
               urlInput={urlInput}
@@ -461,16 +537,34 @@ export default function App() {
                   </div>
                   <h3 className="text-base font-bold text-slate-900">No Discovered URLs Yet</h3>
                   <p className="text-xs text-slate-500">
-                    Start a crawl in the Crawler tab to extract and index all valid internal webpage URLs.
+                    Start a crawl in the Crawler tab to extract and index all valid internal webpage URLs, or explore immediately with sample data.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveNavTab('crawler')}
-                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5"
-                  >
-                    <Compass className="h-3.5 w-3.5" />
-                    <span>Go to Crawler</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleLoadDemo}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      <span>Load Sample URLs</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveNavTab('tools_hub')}
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 inline-flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      <span>See All Tools</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveNavTab('crawler')}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <Compass className="h-3.5 w-3.5" />
+                      <span>Go to Crawler</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -497,16 +591,34 @@ export default function App() {
                   </div>
                   <h3 className="text-base font-bold text-slate-900">No Language Data Available</h3>
                   <p className="text-xs text-slate-500">
-                    Perform a crawl to view the breakdown of detected languages, locale percentages, and targeted exports.
+                    Perform a crawl to view the breakdown of detected languages, locale percentages, and targeted exports, or load demo data.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveNavTab('crawler')}
-                    className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5"
-                  >
-                    <Compass className="h-3.5 w-3.5" />
-                    <span>Go to Crawler</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleLoadDemo}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      <span>Load Sample Languages</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveNavTab('tools_hub')}
+                      className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 inline-flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      <span>See All Tools</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveNavTab('crawler')}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      <Compass className="h-3.5 w-3.5" />
+                      <span>Go to Crawler</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -520,6 +632,9 @@ export default function App() {
               crawlId={activeCrawlId}
               crawlStats={stats}
               onValidationComplete={handleReloadResults}
+              onLoadDemoData={handleLoadDemo}
+              onSelectNavTab={setActiveNavTab}
+              initialTab={targetValidationTab}
             />
           </div>
         )}
