@@ -1032,6 +1032,7 @@ export class AssetValidator {
     let statusCode = 0;
     let contentType = '';
     let finalUrl = targetUrl;
+    let lastHeaders: Record<string, string> = {};
     let errorDesc: string | undefined;
 
     try {
@@ -1051,6 +1052,7 @@ export class AssetValidator {
             redirectChainLength: redirectChain.length,
             redirectIssue: 'REDIRECT_LOOP',
             responseTimeMs: Date.now() - startTime,
+            headers: lastHeaders,
             error: `Redirect loop detected at ${currentUrl}`,
           };
         }
@@ -1065,7 +1067,7 @@ export class AssetValidator {
         statusCode = checkRes.statusCode;
         contentType = checkRes.contentType;
         finalUrl = currentUrl;
-        const lastHeaders = checkRes.headers || {};
+        lastHeaders = checkRes.headers || {};
 
         const locationHeader = checkRes.headers['location'];
 
@@ -1119,7 +1121,7 @@ export class AssetValidator {
         redirectChainLength: chainLen,
         redirectIssue,
         responseTimeMs,
-        headers: checkRes ? checkRes.headers : {},
+        headers: lastHeaders,
         error: errorDesc,
       };
     } catch (err: any) {
