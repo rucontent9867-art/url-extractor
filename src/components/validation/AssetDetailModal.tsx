@@ -373,13 +373,29 @@ export const AssetDetailModal: React.FC<AssetDetailModalProps> = ({ item, onClos
               <div className="space-y-1.5 text-xs">
                 <div className="bg-white p-2 rounded-lg border border-amber-200 font-mono text-[11px]">
                   <span className="text-slate-400 block text-[10px] uppercase font-semibold">Original URL</span>
-                  <span className="text-slate-800 break-all">{item.url}</span>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-800 break-all hover:text-emerald-700 hover:underline"
+                    title={`Open in new tab: ${item.url}`}
+                  >
+                    {item.url}
+                  </a>
                 </div>
 
                 {item.finalUrl && item.finalUrl !== item.url && (
                   <div className="bg-white p-2 rounded-lg border border-amber-200 font-mono text-[11px]">
                     <span className="text-slate-400 block text-[10px] uppercase font-semibold">Final Destination URL</span>
-                    <span className="text-emerald-800 font-semibold break-all">{item.finalUrl}</span>
+                    <a
+                      href={item.finalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-800 font-semibold break-all hover:underline"
+                      title={`Open in new tab: ${item.finalUrl}`}
+                    >
+                      {item.finalUrl}
+                    </a>
                   </div>
                 )}
               </div>

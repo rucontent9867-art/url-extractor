@@ -26,6 +26,37 @@ import { validateLinkHealthForSession, validateLinkHealthForUrls } from '../vali
 import { getEffectiveIgnoredSlugs } from './settingsStore';
 import { hasIgnoredSlug } from '../crawler/urlNormalizer';
 
+/**
+ * Resolves to a settled result, giving up after `ms` so a hung browser check can
+ * never block the whole audit.
+ */
+function settleWithin<T>(promise: Promise<T>, ms: number, label: string): Promise<PromiseSettledResult<T>> {
+  return new Promise((resolve) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      console.warn(`${label} validation exceeded ${ms}ms — continuing without it`);
+      resolve({ status: 'rejected', reason: new Error(`${label} validation timed out` ) });
+    }, ms);
+
+    promise.then(
+      (value) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve({ status: 'fulfilled', value });
+      },
+      (reason) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve({ status: 'rejected', reason });
+      }
+    );
+  });
+}
+
 export class ValidationService {
   public async validateLinkHealthOnly(crawlId: string): Promise<LinkHealthResult> {
     const session = crawlStore.getSession(crawlId);
@@ -273,18 +304,14 @@ export class ValidationService {
       validateAmp(session, ampOptions || { passThreshold: 95, warnThreshold: 85 }),
     ]);
 
-    // 2. Run browser-rendered / DOM validators in sequence to prevent container process contention
-    const headerRes = await Promise.allSettled([
-      headerValidator.validate(session, headerOptions || { maxPages: 10 }),
-    ]).then(([r]) => r);
-
-    const visualRes = await Promise.allSettled([
-      visualValidator.validate(session, visualOptions || { maxPages: 8 }),
-    ]).then(([r]) => r);
-
-    const interactionRes = await Promise.allSettled([
-      interactionValidator.validate(session, interactionOptions || { maxPages: 8 }),
-    ]).then(([r]) => r);
+    // 2. Run browser-rendered / DOM validators with a hard timeout each.
+    //    A headless browser can fail to launch (locked profile, missing GPU, sandbox
+    //    restrictions); without a bound the whole audit would never return.
+    const [headerRes, visualRes, interactionRes] = await Promise.all([
+      settleWithin(headerValidator.validate(session, headerOptions || { maxPages: 10 }), 60_000, 'Navigation'),
+      settleWithin(visualValidator.validate(session, visualOptions || { maxPages: 8 }), 60_000, 'Layout'),
+      settleWithin(interactionValidator.validate(session, interactionOptions || { maxPages: 8 }), 60_000, 'Interaction'),
+    ]);
 
     const assetValidation = assetRes.status === 'fulfilled' ? assetRes.value : undefined;
     if (assetRes.status === 'rejected') {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CrawlStats,
   ValidationSummary,
@@ -39,6 +39,25 @@ import {
 } from 'lucide-react';
 import { fetchJson } from '../../utils/apiUtils';
 
+const AUDIT_GROUPS = [
+  { id: 'links', label: 'Links & sitemaps', tabs: ['linkhealth', 'sitemap'], icon: Link2 },
+  { id: 'content', label: 'Content & languages', tabs: ['completeness', 'content', 'header'], icon: Languages },
+  { id: 'frontend', label: 'Frontend quality', tabs: ['visual', 'interaction', 'amp'], icon: Eye },
+  { id: 'assets', label: 'Images & assets', tabs: ['asset'], icon: FileCheck2 },
+] as const;
+
+const SUB_TAB_LABELS: Record<string, string> = {
+  linkhealth: 'Broken links',
+  sitemap: 'Sitemap coverage',
+  completeness: 'Translations',
+  content: 'Content language',
+  header: 'Navigation',
+  visual: 'Layouts',
+  interaction: 'Interactions',
+  amp: 'AMP',
+};
+
+
 interface ValidationDashboardProps {
   crawlId: string | null;
   crawlStats: CrawlStats | null;
@@ -46,6 +65,8 @@ interface ValidationDashboardProps {
   onLoadDemoData?: () => void;
   onSelectNavTab?: (tab: any) => void;
   initialTab?: string;
+  /** Bumped by the one-click audit: run every check as soon as results are available. */
+  autoRunKey?: number;
 }
 
 export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
@@ -55,6 +76,7 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
   onLoadDemoData,
   onSelectNavTab,
   initialTab,
+  autoRunKey,
 }) => {
   const [activeTab, setActiveTab] = useState<
     | 'linkhealth'
@@ -66,13 +88,15 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
     | 'asset'
     | 'visual'
     | 'interaction'
-  >((initialTab as any) || 'sitemap');
+  >((initialTab as any) || 'linkhealth');
 
   useEffect(() => {
     if (initialTab) {
       setActiveTab(initialTab as any);
     }
   }, [initialTab]);
+  const activeGroup = AUDIT_GROUPS.find((group) => (group.tabs as readonly string[]).includes(activeTab));
+
   const [summary, setSummary] = useState<ValidationSummary | null>(null);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [isSitemapLoading, setIsSitemapLoading] = useState(false);
@@ -120,6 +144,16 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
       setIsRunningAll(false);
     }
   };
+
+  // One-click audit flow: run all checks once per autoRunKey bump.
+  const lastAutoRunRef = useRef(0);
+  useEffect(() => {
+    if (!autoRunKey || !crawlId) return;
+    if (autoRunKey <= lastAutoRunRef.current) return;
+    lastAutoRunRef.current = autoRunKey;
+    void handleRunAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunKey, crawlId]);
 
   const handleRunLinkHealth = async () => {
     if (!crawlId) return;
@@ -434,339 +468,49 @@ export const ValidationDashboard: React.FC<ValidationDashboardProps> = ({
         onSelectTab={setActiveTab}
       />
 
-      {/* Validation Navigation Tabs - All displayed on screen without horizontal scroll */}
+      {/* Grouped navigation: four plain areas instead of nine numbered tools */}
       <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 w-full shadow-2xs">
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-1.5 w-full">
-          {/* Tab 1: English URLs vs. Sitemap */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('sitemap')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'sitemap'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <ShieldCheck className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'sitemap' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">1. Sitemap</span>
-            </div>
-            {summary?.sitemap ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.sitemap.missingFromSitemap === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 w-full">
+          {AUDIT_GROUPS.map((group) => {
+            const isActive = activeGroup?.id === group.id;
+            const GroupIcon = group.icon;
+            return (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => setActiveTab(group.tabs[0] as any)}
+                className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 min-w-0 border cursor-pointer ${
+                  isActive
+                    ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
+                    : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
                 }`}
               >
-                {summary.sitemap.missingFromSitemap === 0 ? 'Pass' : `${summary.sitemap.missingFromSitemap} Miss`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'sitemap' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 2: Language Page Completeness */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('completeness')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'completeness'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <Layers className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'completeness' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">2. Completeness</span>
-            </div>
-            {summary?.completeness ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.completeness.totalMissing === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.completeness.totalMissing === 0 ? 'Pass' : `${summary.completeness.totalMissing} Miss`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'completeness' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 3: Page Content Language */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('content')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'content'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <Languages className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'content' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">3. Content Lang</span>
-            </div>
-            {summary?.contentLanguage ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.contentLanguage.mismatchCount === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.contentLanguage.mismatchCount === 0
-                  ? 'Pass'
-                  : `${summary.contentLanguage.mismatchCount} Err`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'content' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 4: Header & Language Navigation */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('header')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'header'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <Smartphone className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'header' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">4. Navigation</span>
-            </div>
-            {summary?.headerNavigation ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.headerNavigation.headerMismatchCount === 0 &&
-                  summary.headerNavigation.totalLanguageErrors === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.headerNavigation.headerMismatchCount === 0 &&
-                summary.headerNavigation.totalLanguageErrors === 0
-                  ? 'Pass'
-                  : `${summary.headerNavigation.headerMismatchCount + summary.headerNavigation.totalLanguageErrors} Err`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'header' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 5: AMP Validation */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('amp')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'amp'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <Zap className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'amp' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">5. AMP</span>
-            </div>
-            {summary?.ampValidation ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.ampValidation.errorCount === 0
-                    ? summary.ampValidation.warningCount === 0
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.ampValidation.errorCount === 0
-                  ? summary.ampValidation.warningCount === 0
-                    ? summary.ampValidation.totalAmpFound > 0 ? 'Pass' : '0 AMP'
-                    : `${summary.ampValidation.warningCount} Warn`
-                  : `${summary.ampValidation.errorCount} Err`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'amp' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 6: Links, Assets & HTTP Health */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('asset')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'asset'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <FileCheck2 className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'asset' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">6. Assets & Health</span>
-            </div>
-            {summary?.assetValidation ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  (summary.assetValidation.brokenAssets ?? (summary.assetValidation as any).brokenCount ?? 0) === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {(summary.assetValidation.brokenAssets ?? (summary.assetValidation as any).brokenCount ?? 0) === 0
-                  ? 'Pass'
-                  : `${summary.assetValidation.brokenAssets ?? (summary.assetValidation as any).brokenCount ?? 0} Broken`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'asset' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 7: Visual & Viewport */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('visual')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'visual'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <Eye className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'visual' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">7. Viewport</span>
-            </div>
-            {summary?.visualValidation ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.visualValidation.totalErrors === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.visualValidation.totalErrors === 0
-                  ? 'Pass'
-                  : `${summary.visualValidation.totalErrors} Breaks`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'visual' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 8: Interaction & Console */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('interaction')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'interaction'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <MousePointerClick className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'interaction' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">8. Interaction</span>
-            </div>
-            {summary?.interactionValidation ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.interactionValidation.errorCount === 0
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.interactionValidation.errorCount === 0
-                  ? 'Pass'
-                  : `${summary.interactionValidation.consoleErrorCount ?? summary.interactionValidation.errorCount} JS Err`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'interaction' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
-
-          {/* Tab 9: Link & URL Health */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('linkhealth')}
-            className={`w-full py-2.5 px-2 rounded-xl text-xs font-semibold transition-all flex flex-col items-center justify-center text-center gap-1.5 min-w-0 border cursor-pointer ${
-              activeTab === 'linkhealth'
-                ? 'bg-white text-slate-900 border-slate-200 shadow-xs ring-1 ring-slate-900/5'
-                : 'bg-transparent text-slate-600 border-transparent hover:bg-white/60 hover:text-slate-900'
-            }`}
-          >
-            <div className="flex items-center space-x-1.5 justify-center w-full min-w-0">
-              <Link2 className={`h-3.5 w-3.5 shrink-0 ${activeTab === 'linkhealth' ? 'text-slate-900' : 'text-slate-500'}`} />
-              <span className="truncate text-[11px] sm:text-xs">9. Link Health</span>
-            </div>
-            {summary?.linkHealth ? (
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none shrink-0 ${
-                  summary.linkHealth.overallStatus === 'passed'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : summary.linkHealth.overallStatus === 'warning'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-rose-100 text-rose-800'
-                }`}
-              >
-                {summary.linkHealth.overallStatus === 'passed'
-                  ? 'Pass'
-                  : summary.linkHealth.brokenInternalCount + summary.linkHealth.brokenExternalCount > 0
-                  ? `${summary.linkHealth.brokenInternalCount + summary.linkHealth.brokenExternalCount} Broken`
-                  : `${summary.linkHealth.items.length} Issue`}
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-normal leading-none">—</span>
-            )}
-            <span
-              className={`h-0.5 w-6 rounded-full transition-all ${
-                activeTab === 'linkhealth' ? 'bg-slate-900' : 'bg-transparent'
-              }`}
-            />
-          </button>
+                <GroupIcon className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-slate-900' : 'text-slate-500'}`} />
+                <span className="truncate text-[11px] sm:text-xs">{group.label}</span>
+              </button>
+            );
+          })}
         </div>
+
+        {activeGroup && activeGroup.tabs.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1 px-1.5 pt-2 pb-1">
+            <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mr-1">Show</span>
+            {activeGroup.tabs.map((tabId) => (
+              <button
+                key={tabId}
+                type="button"
+                onClick={() => setActiveTab(tabId as any)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                  activeTab === tabId
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white/70 text-slate-600 hover:bg-white hover:text-slate-900'
+                }`}
+              >
+                {SUB_TAB_LABELS[tabId] || tabId}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tab Panels */}

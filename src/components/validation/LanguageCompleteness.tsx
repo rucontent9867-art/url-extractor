@@ -258,7 +258,15 @@ export const LanguageCompleteness: React.FC<LanguageCompletenessProps> = ({
                 className="flex items-center justify-between py-1.5 px-2.5 rounded-lg bg-white border border-slate-200 text-xs font-mono"
               >
                 <div className="truncate mr-2">
-                  <span className="text-slate-800">{item.url}</span>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-800 hover:text-emerald-700 hover:underline"
+                    title={`Open in new tab: ${item.url}`}
+                  >
+                    {item.url}
+                  </a>
                   <span className="text-[10px] text-slate-500 font-sans ml-2">
                     ({item.reason})
                   </span>

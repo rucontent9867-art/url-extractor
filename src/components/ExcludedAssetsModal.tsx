@@ -431,9 +431,15 @@ export const ExcludedAssetsModal: React.FC<ExcludedAssetsModalProps> = ({
                     <td className="py-2.5 px-4 font-mono text-[11px] text-slate-800 max-w-md">
                       <div className="flex items-center space-x-2">
                         {getCategoryIcon(item.category)}
-                        <span className="truncate select-all" title={item.url}>
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate hover:text-emerald-700 hover:underline"
+                          title={`Open in new tab: ${item.url}`}
+                        >
                           {item.url}
-                        </span>
+                        </a>
                       </div>
                     </td>
 

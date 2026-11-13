@@ -1,35 +1,24 @@
 import React, { useState } from 'react';
 import {
-  ShieldCheck,
-  FileSearch,
-  Globe2,
-  Layers,
-  FileCheck2,
-  Smartphone,
-  Eye,
-  MousePointerClick,
-  Compass,
-  Sliders,
-  Settings2,
-  Zap,
-  Sparkles,
   ArrowRight,
-  ExternalLink,
   CheckCircle2,
-  AlertTriangle,
-  Play,
-  RotateCcw,
-  ListOrdered,
-  FileCode,
+  Eye,
+  Image,
+  Layers,
   Link2,
+  RotateCcw,
   Search,
+  ShieldCheck,
+  Sliders,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
-import { MainNavTab } from './Header';
-import { ValidationToolId } from '../types';
+import type { MainNavTab } from './Header';
+import type { ValidationToolId } from '../types';
 import { ToolExclusionSettingsModal } from './validation/ToolExclusionSettingsModal';
-import { Tool6SettingsModal } from './validation/Tool6SettingsModal';
 
 interface ToolsHubProps {
+  onStartAudit: (url: string) => void;
   onSelectNavTab: (tab: MainNavTab) => void;
   onOpenValidationTool?: (toolId: string) => void;
   onLoadDemoData: () => void;
@@ -37,11 +26,16 @@ interface ToolsHubProps {
   hasActiveData: boolean;
   activeDomain?: string;
   totalUrlsCount?: number;
+  isBusy?: boolean;
+  errorMessage?: string;
 }
 
-type ToolCategory = 'all' | 'seo' | 'localization' | 'qa' | 'assets' | 'crawler';
-
+/**
+ * Start screen: one input, one button, one obvious next step.
+ * Everything technical lives behind "Results" and "Crawl".
+ */
 export const ToolsHub: React.FC<ToolsHubProps> = ({
+  onStartAudit,
   onSelectNavTab,
   onOpenValidationTool,
   onLoadDemoData,
@@ -49,481 +43,278 @@ export const ToolsHub: React.FC<ToolsHubProps> = ({
   hasActiveData,
   activeDomain,
   totalUrlsCount = 0,
+  isBusy = false,
+  errorMessage,
 }) => {
-  const [activeCategory, setActiveCategory] = useState<ToolCategory>('all');
-  const [searchFilter, setSearchFilter] = useState('');
+  const [auditUrl, setAuditUrl] = useState('');
   const [isExclusionModalOpen, setIsExclusionModalOpen] = useState(false);
-  const [selectedExclusionTool, setSelectedExclusionTool] = useState<ValidationToolId>('sitemap');
-  const [isTool6ModalOpen, setIsTool6ModalOpen] = useState(false);
+  const [selectedExclusionTool, setSelectedExclusionTool] = useState<ValidationToolId>('linkHealth');
 
-  const tools = [
+  const groups = [
     {
-      id: 'tool-sitemap',
-      toolId: 'sitemap',
-      number: 'Tool 1',
-      title: 'Sitemap Coverage Validator',
-      subtitle: 'English/Canonical URLs vs. XML Sitemaps',
-      category: 'seo',
-      categoryLabel: 'SEO & Indexing',
-      icon: ShieldCheck,
-      color: 'emerald',
-      description:
-        'Audits whether all crawled internal English and canonical URLs exist within the site’s XML sitemaps (sitemap.xml). Detects orphan pages, missing indexed links, and sitemap-only URLs while ignoring localized prefixes.',
-      metrics: ['Sitemap Coverage %', 'Missing URL Extraction', 'Sitemap-only URLs', 'Canonical Path Sync'],
-      tabTarget: 'validation',
-      validationTab: 'sitemap',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-completeness',
-      toolId: 'completeness',
-      number: 'Tool 2',
-      title: 'Language Completeness Matrix',
-      subtitle: 'Cross-Locale Missing Translation Matrix',
-      category: 'localization',
-      categoryLabel: 'Localization',
-      icon: Layers,
-      color: 'blue',
-      description:
-        'Builds a multi-language comparison matrix across all discovered locales (e.g. /fr/, /de/, /es/, /it/). Flags missing localized translations for every canonical slug with 1-click clipboard export for translation teams.',
-      metrics: ['Missing Translations by Locale', 'Translation Parity %', 'Extra Unmapped Pages', 'Missing Slug Export'],
-      tabTarget: 'validation',
-      validationTab: 'completeness',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-content-lang',
-      toolId: 'content',
-      number: 'Tool 3',
-      title: 'Content Language & Drift Detector',
-      subtitle: 'Statistical Body Text Language Verification',
-      category: 'localization',
-      categoryLabel: 'Localization',
-      icon: Globe2,
-      color: 'indigo',
-      description:
-        'Extracts page body content, ignores dynamic widgets/chatbars, and executes statistical n-gram language detection. Flags translation drift where English text remains unlocalized on non-English URLs.',
-      metrics: ['Text Confidence Score', 'Language Mismatch Alerts', 'Static DOM Filtering', 'Custom Confidence Threshold'],
-      tabTarget: 'validation',
-      validationTab: 'content',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-header-nav',
-      toolId: 'header',
-      number: 'Tool 4',
-      title: 'Header & Language Navigation Auditor',
-      subtitle: 'Automated Navigation & Locale Switcher Audit',
-      category: 'qa',
-      categoryLabel: 'Frontend QA',
-      icon: FileSearch,
-      color: 'purple',
-      description:
-        'Audits top navigation bars, mobile menus, and language dropdown switchers using Playwright and synthetic DOM. Ensures clicking a language switch preserves the current page context instead of redirecting to the homepage.',
-      metrics: ['Context Preservation Check', 'Broken Header Link Audit', 'Dropdown Language Verification', 'Destination HTTP Status'],
-      tabTarget: 'validation',
-      validationTab: 'header',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-amp',
-      toolId: 'amp',
-      number: 'Tool 5',
-      title: 'AMP Mobile Parity Validator',
-      subtitle: 'Accelerated Mobile Pages Verification',
-      category: 'seo',
-      categoryLabel: 'SEO & Mobile',
-      icon: Smartphone,
-      color: 'amber',
-      description:
-        'Validates existence of AMP versions, checks <link rel="amphtml"> tags, verifies reciprocal canonical tags, and generates side-by-side text content parity comparisons between desktop and AMP pages.',
-      metrics: ['amphtml Tag Audit', 'Reciprocal Canonical Check', 'Content Similarity %', 'Visual Content Diff Viewer'],
-      tabTarget: 'validation',
-      validationTab: 'amp',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-asset',
-      toolId: 'asset',
-      number: 'Tool 6',
-      title: 'Asset, Resource & Media Health Inspector',
-      subtitle: 'Deep Asset Audit & Broken Resource Detector',
-      category: 'assets',
-      categoryLabel: 'Media & Assets',
-      icon: FileCheck2,
-      color: 'rose',
-      description:
-        'Crawls all embedded page resources—images, stylesheets, scripts, videos, fonts, and PDFs. Flags broken 404 assets, slow response times, and allows configuring granular domain exclusion rules.',
-      metrics: ['Broken 404 Asset Detector', 'Resource Latency Audit', 'Media Category Breakdown', 'Custom Asset Filtering Rules'],
-      tabTarget: 'validation',
-      validationTab: 'asset',
-      supportsTool6Modal: true,
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-visual',
-      toolId: 'visual',
-      number: 'Tool 7',
-      title: 'Responsive & Multi-Viewport Layout Auditor',
-      subtitle: 'Desktop, Tablet & Mobile Overflow Inspector',
-      category: 'qa',
-      categoryLabel: 'Frontend QA',
-      icon: Eye,
-      color: 'teal',
-      description:
-        'Renders pages across Desktop (1280px), Tablet (768px), and Mobile (375px) viewports. Detects horizontal scroll overflows, cut-off tables, overflowing text containers, and captures visual metrics.',
-      metrics: ['Horizontal Overflow Detection', 'Offending Element CSS Selector', 'Multi-Viewport Rendering', 'Visual Evidence Reports'],
-      tabTarget: 'validation',
-      validationTab: 'visual',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-interaction',
-      toolId: 'interaction',
-      number: 'Tool 8',
-      title: 'Interactive Console & UI Health Validator',
-      subtitle: 'Headless DOM Interaction & JS Error Monitor',
-      category: 'qa',
-      categoryLabel: 'Frontend QA',
-      icon: MousePointerClick,
-      color: 'cyan',
-      description:
-        'Monitors JavaScript runtime console errors, failed AJAX/fetch network requests, and triggers interactive elements like hamburger navigation toggles, dropdowns, and form submits.',
-      metrics: ['JS Runtime Error Logger', 'Failed Network Request Sniffer', 'Interactive Button Testing', 'Form & Drawer Health'],
-      tabTarget: 'validation',
-      validationTab: 'interaction',
-      supportsExclusionModal: true,
-    },
-    {
-      id: 'tool-link-health',
-      toolId: 'linkHealth',
-      number: 'Tool 9',
-      title: 'Link & URL Health Engine',
-      subtitle: 'Dual-Mode Link, Redirect & Anchor Audit',
-      category: 'seo',
-      categoryLabel: 'Links & SEO',
+      id: 'links',
+      title: 'Links & sitemaps',
+      blurb: 'Broken links, redirect loops, empty anchors and pages missing from your sitemap.',
       icon: Link2,
-      color: 'emerald',
-      description:
-        'Audits every <a> tag in two modes: a full-website deep scan of the crawled session, or an instant audit of a pasted URL list. Detects 4xx/5xx destinations, multi-hop redirect chains, redirect loops, double slashes, placeholder hrefs, broken in-page anchors, empty anchor text, and tracking parameter pollution.',
-      metrics: [
-        'Broken 4xx/5xx Links',
-        'Redirect Chains & Loops',
-        'Placeholder (#) Links',
-        'Broken In-Page Anchors',
-        'Empty Anchor Text',
-        'Double-Slash URLs',
-        'Tracking Params',
-        'CSV + Jira Export',
-      ],
-      tabTarget: 'validation',
-      validationTab: 'linkhealth',
-      supportsExclusionModal: true,
+      tool: 'linkhealth',
+      checks: 6,
     },
     {
-      id: 'tool-crawler',
-      toolId: 'crawler',
-      number: 'Engine',
-      title: 'High-Speed Webpage URL Extractor & Sieve',
-      subtitle: 'BFS Recursive Crawler + XML Sitemap Discoverer',
-      category: 'crawler',
-      categoryLabel: 'Discovery & Crawl',
-      icon: Compass,
-      color: 'slate',
-      description:
-        'Parallelized crawler supporting both full domain recursive crawling and instant target URL lists. Automatically isolates webpage URLs from static media assets, strips tracking tags, and resolves redirects.',
-      metrics: ['Recursive BFS Traversal', 'Parallel Concurrency (up to 50)', 'Sitemap Discovery', 'Robots.txt Adherence'],
-      tabTarget: 'crawler',
-      supportsAdvancedSettings: true,
+      id: 'content',
+      title: 'Content & languages',
+      blurb: 'Missing translations, wrong language tags and language switchers that lead nowhere.',
+      icon: Layers,
+      tool: 'completeness',
+      checks: 3,
     },
     {
-      id: 'tool-urls-table',
-      toolId: 'urls',
-      number: 'Data Hub',
-      title: 'Discovered URLs Explorer & Extractor',
-      subtitle: 'Canonical Matching, Source Tracking & Data Export',
-      category: 'crawler',
-      categoryLabel: 'Extraction & Export',
-      icon: ListOrdered,
-      color: 'emerald',
-      description:
-        'Interactive data table for all discovered webpage URLs. View canonical paths, status codes, response times, language flags, and source pages. Filter by language and export to CSV or clipboard.',
-      metrics: ['Instant Search & Filter', 'Source Traceability', 'Status Code Segmentation', 'CSV & Clipboard One-Click Export'],
-      tabTarget: 'urls',
+      id: 'frontend',
+      title: 'Frontend quality',
+      blurb: 'Layouts breaking on phones, JavaScript errors, dead buttons and AMP mismatches.',
+      icon: Eye,
+      tool: 'visual',
+      checks: 3,
     },
     {
-      id: 'tool-languages-hub',
-      toolId: 'languages',
-      number: 'Locale Hub',
-      title: 'Multi-Language Segmenter & Analytics',
-      subtitle: 'Language Breakdown, Locale Percentages & Targeted Export',
-      category: 'localization',
-      categoryLabel: 'Localization',
-      icon: Globe2,
-      color: 'blue',
-      description:
-        'Aggregates all discovered URLs into language families. Visualizes percentage share per locale and allows exporting targeted URL lists for specific localized paths (e.g. export only French URLs).',
-      metrics: ['Locale Distribution Chart', 'Language Share %', 'Targeted Locale Export', 'Prefix-based Categorization'],
-      tabTarget: 'languages',
+      id: 'assets',
+      title: 'Images & assets',
+      blurb: 'Broken images, oversized files and insecure (mixed-content) resources.',
+      icon: Image,
+      tool: 'asset',
+      checks: 1,
     },
   ];
 
-  const filteredTools = tools.filter((tool) => {
-    const matchesCategory = activeCategory === 'all' || tool.category === activeCategory;
-    const matchesSearch =
-      !searchFilter.trim() ||
-      tool.title.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      tool.subtitle.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      tool.description.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      tool.metrics.some((m) => m.toLowerCase().includes(searchFilter.toLowerCase()));
-    return matchesCategory && matchesSearch;
-  });
-
-  const handleLaunchTool = (tool: (typeof tools)[0]) => {
-    if (tool.tabTarget === 'validation' && tool.validationTab) {
-      onSelectNavTab('validation');
-      onOpenValidationTool?.(tool.validationTab);
-    } else {
-      onSelectNavTab(tool.tabTarget as MainNavTab);
-    }
-  };
-
-  const handleOpenExclusion = (toolId: string) => {
-    setSelectedExclusionTool(toolId as ValidationToolId);
-    setIsExclusionModalOpen(true);
+  const submitAudit = () => {
+    const value = auditUrl.trim();
+    if (!value) return;
+    onStartAudit(value);
   };
 
   return (
     <div className="space-y-6">
-      {/* Top Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 border border-slate-800 text-white p-6 sm:p-8 shadow-xl">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-10 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* One action: audit a site */}
+      <section className="rounded-3xl bg-slate-900 text-white p-6 sm:p-10 shadow-xl relative overflow-hidden">
+        <div className="absolute -top-16 -right-16 h-64 w-64 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Comprehensive 12-in-1 Webpage & SEO Suite</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              All Tools & Automated Auditing Suite
-            </h2>
-            <p className="text-sm text-slate-300 leading-relaxed">
-              Explore, configure, and inspect every specialized auditing tool in the platform. You can review all tool
-              capabilities, customize exclusion rules, test with interactive demo data, or execute a live crawler session.
+        <div className="relative max-w-3xl space-y-5">
+          <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[11px] font-semibold">
+            <Sparkles className="h-3 w-3" />
+            <span>Website audit in one step</span>
+          </span>
+
+          <div className="space-y-2">
+            <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+              Find everything broken on a website.
+            </h1>
+            <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+              Paste a website address. We crawl it, run 13 checks and show you exactly what to fix —
+              starting with the most damaging problems.
             </p>
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <div className="relative flex-1">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3.5" />
+              <input
+                type="text"
+                value={auditUrl}
+                onChange={(e) => setAuditUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitAudit();
+                }}
+                placeholder="yourwebsite.com"
+                aria-label="Website address to audit"
+                className="w-full pl-10 pr-3 py-3 rounded-xl bg-white text-slate-900 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={submitAudit}
+              disabled={isBusy || !auditUrl.trim()}
+              className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-sm flex items-center justify-center space-x-2 transition-colors cursor-pointer"
+            >
+              {isBusy ? <RotateCcw className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              <span>{isBusy ? 'Auditing…' : 'Run audit'}</span>
+            </button>
+          </div>
+
+          {errorMessage && (
+            <p className="text-xs text-rose-300 bg-rose-500/10 border border-rose-500/25 rounded-lg px-3 py-2">
+              {errorMessage}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-slate-400">
             <button
               type="button"
               onClick={onLoadDemoData}
-              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center space-x-2 transition-all shadow-md shadow-emerald-950/40 cursor-pointer"
+              className="inline-flex items-center space-x-1.5 text-emerald-300 hover:text-emerald-200 font-semibold cursor-pointer"
             >
-              <Zap className="h-4 w-4 fill-slate-950" />
-              <span>Load Sample Dataset (Instant Tour)</span>
+              <Zap className="h-3 w-3" />
+              <span>See a finished example instead</span>
             </button>
-
+            <span className="hidden sm:inline text-slate-600">•</span>
             <button
               type="button"
               onClick={() => onSelectNavTab('crawler')}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-semibold text-xs border border-slate-700 flex items-center space-x-2 transition-all cursor-pointer"
+              className="inline-flex items-center space-x-1.5 hover:text-slate-200 cursor-pointer"
             >
-              <Play className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Launch Live Crawler</span>
+              <Sliders className="h-3 w-3" />
+              <span>Audit a list of specific pages</span>
             </button>
+          </div>
 
-            {hasActiveData && (
+          {hasActiveData && (
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+              <span className="px-2 py-1 rounded-lg bg-white/10 text-slate-200">
+                Last run: {activeDomain || 'website'} · {totalUrlsCount.toLocaleString()} pages
+              </span>
+              <button
+                type="button"
+                onClick={() => onSelectNavTab('validation')}
+                className="px-2.5 py-1 rounded-lg bg-white text-slate-900 font-semibold hover:bg-slate-100 cursor-pointer"
+              >
+                View results
+              </button>
               <button
                 type="button"
                 onClick={onResetSession}
-                className="px-3 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold text-xs border border-rose-500/20 flex items-center space-x-1.5 transition-all cursor-pointer"
-                title="Reset active dataset"
+                className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-300 hover:text-white cursor-pointer"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>Reset</span>
+                Clear
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
+      </section>
 
-        {/* Status ticker */}
-        <div className="mt-6 pt-5 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-          <div>
-            <span className="text-slate-400 text-[11px] block">Total Specialized Tools</span>
-            <span className="font-bold text-white text-base">12 Tools Built-in</span>
-          </div>
-          <div>
-            <span className="text-slate-400 text-[11px] block">Active Session State</span>
-            <span className={`font-bold ${hasActiveData ? 'text-emerald-400' : 'text-slate-300'}`}>
-              {hasActiveData ? `Dataset Loaded (${totalUrlsCount} URLs)` : 'Pre-Crawl Ready'}
+      {/* How it works — three short steps */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { step: '1', title: 'Enter a website', text: 'Just the address — no setup or account needed.' },
+          { step: '2', title: 'We crawl and check', text: 'Every page, link, image and language version we can find.' },
+          { step: '3', title: 'Fix what is flagged', text: 'A prioritised list with the exact page and suggested fix.' },
+        ].map((item) => (
+          <div key={item.step} className="bg-white rounded-2xl border border-slate-200 p-4 flex items-start space-x-3">
+            <span className="h-7 w-7 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center shrink-0">
+              {item.step}
             </span>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
+              <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{item.text}</p>
+            </div>
           </div>
+        ))}
+      </section>
+
+      {/* What gets checked — four plain-language groups */}
+      <section className="space-y-3">
+        <div className="flex items-end justify-between">
           <div>
-            <span className="text-slate-400 text-[11px] block">Audit Engine</span>
-            <span className="font-bold text-white">Playwright + Synthetic DOM</span>
+            <h2 className="text-base font-bold text-slate-900">What we check</h2>
+            <p className="text-xs text-slate-500">13 checks, grouped so you only see the results that matter.</p>
           </div>
-          <div>
-            <span className="text-slate-400 text-[11px] block">Target Domain</span>
-            <span className="font-bold text-slate-200 truncate block">
-              {activeDomain || 'togo-evisa.com (Demo)'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        {/* Category Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-          {[
-            { id: 'all', label: 'All Tools (12)' },
-            { id: 'seo', label: 'SEO & Sitemaps' },
-            { id: 'localization', label: 'Localization' },
-            { id: 'qa', label: 'Frontend QA' },
-            { id: 'assets', label: 'Media & Assets' },
-            { id: 'crawler', label: 'Crawl & Extract' },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setActiveCategory(cat.id as ToolCategory)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeCategory === cat.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => onSelectNavTab('validation')}
+            className="text-xs font-semibold text-slate-600 hover:text-slate-900 inline-flex items-center space-x-1 cursor-pointer"
+          >
+            <span>Open results</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-72">
-          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            placeholder="Search tools, checks, metrics..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900"
-          />
-        </div>
-      </div>
-
-      {/* Tool Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredTools.map((tool) => {
-          const IconComponent = tool.icon;
-          return (
-            <div
-              key={tool.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
-            >
-              <div className="p-5 space-y-4">
-                {/* Header row */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="h-10 w-10 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
-                      <IconComponent className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-1.5">
-                        <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                          {tool.number}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                          {tool.categoryLabel}
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
-                        {tool.title}
-                      </h3>
-                    </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {groups.map((group) => {
+            const IconComponent = group.icon;
+            return (
+              <div
+                key={group.id}
+                className="bg-white rounded-2xl border border-slate-200 p-4 flex items-start justify-between gap-3 hover:border-slate-300 transition-colors"
+              >
+                <div className="flex items-start space-x-3 min-w-0">
+                  <div className="h-9 w-9 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center shrink-0">
+                    <IconComponent className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900">
+                      {group.title}
+                      <span className="ml-1.5 text-[10px] font-mono font-semibold text-slate-400">
+                        {group.checks} {group.checks === 1 ? 'check' : 'checks'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 leading-relaxed mt-0.5">{group.blurb}</p>
                   </div>
                 </div>
-
-                {/* Subtitle & Description */}
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-700 mb-1">{tool.subtitle}</h4>
-                  <p className="text-xs text-slate-500 leading-relaxed line-clamp-3">{tool.description}</p>
-                </div>
-
-                {/* Check list / Capabilities */}
-                <div className="space-y-1.5 pt-3 border-t border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Core Inspection Points:
-                  </span>
-                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600">
-                    {tool.metrics.map((metric, idx) => (
-                      <div key={idx} className="flex items-center space-x-1.5 truncate">
-                        <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
-                        <span className="truncate">{metric}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Footer */}
-              <div className="p-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-2">
-                <div className="flex items-center space-x-1.5">
-                  {tool.supportsExclusionModal && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenExclusion(tool.toolId)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200/80 text-xs font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
-                      title="Configure tool exclusion rules"
-                    >
-                      <Sliders className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline text-[11px]">Rules</span>
-                    </button>
-                  )}
-
-                  {tool.supportsTool6Modal && (
-                    <button
-                      type="button"
-                      onClick={() => setIsTool6ModalOpen(true)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200/80 text-xs font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
-                      title="Configure Tool 6 settings"
-                    >
-                      <Settings2 className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline text-[11px]">Settings</span>
-                    </button>
-                  )}
-                </div>
-
                 <button
                   type="button"
-                  onClick={() => handleLaunchTool(tool)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5 transition-all cursor-pointer group-hover:bg-emerald-600"
+                  onClick={() => onOpenValidationTool?.(group.tool)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-900 hover:text-white text-slate-700 text-[11px] font-semibold transition-colors cursor-pointer"
                 >
-                  <span>Open Tool</span>
-                  <ArrowRight className="h-3 w-3" />
+                  Open
                 </button>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </section>
 
-      {/* Exclusions Modal */}
+      {/* Advanced, folded away */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-4">
+        <details className="group">
+          <summary className="cursor-pointer list-none flex items-center justify-between text-xs font-semibold text-slate-700">
+            <span className="inline-flex items-center space-x-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-slate-500" />
+              <span>Advanced: crawl limits and exclusion rules</span>
+            </span>
+            <span className="text-slate-400 group-open:rotate-90 transition-transform">
+              <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          </summary>
+          <div className="pt-3 mt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onSelectNavTab('crawler')}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+            >
+              Crawl settings
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExclusionModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+            >
+              Exclusion rules
+            </button>
+            <label className="inline-flex items-center space-x-1.5 text-xs text-slate-500">
+              <span>for</span>
+              <select
+                value={selectedExclusionTool}
+                onChange={(e) => setSelectedExclusionTool(e.target.value as ValidationToolId)}
+                className="px-2 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white cursor-pointer"
+                aria-label="Which check the exclusion rules apply to"
+              >
+                <option value="linkHealth">Links</option>
+                <option value="sitemap">Sitemap</option>
+                <option value="completeness">Translations</option>
+                <option value="content">Content language</option>
+                <option value="header">Navigation</option>
+                <option value="amp">AMP</option>
+                <option value="asset">Images &amp; assets</option>
+                <option value="visual">Layouts</option>
+                <option value="interaction">Interactions</option>
+              </select>
+            </label>
+          </div>
+        </details>
+      </section>
+
       <ToolExclusionSettingsModal
         isOpen={isExclusionModalOpen}
         onClose={() => setIsExclusionModalOpen(false)}
         toolId={selectedExclusionTool}
-        toolName={
-          tools.find((t) => (t as any).toolId === selectedExclusionTool)?.title || selectedExclusionTool
-        }
-        domain={activeDomain || 'default'}
-      />
-
-      {/* Tool 6 Settings Modal */}
-      <Tool6SettingsModal
-        isOpen={isTool6ModalOpen}
-        onClose={() => setIsTool6ModalOpen(false)}
+        toolName="Audit check"
         domain={activeDomain || 'default'}
       />
     </div>

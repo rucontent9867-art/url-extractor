@@ -279,14 +279,14 @@ export const LinkHealthValidation: React.FC<LinkHealthValidationProps> = ({
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="text-sm font-bold text-slate-900">Tool 9: Link & URL Health Engine</h3>
+              <h3 className="text-sm font-bold text-slate-900">Broken links & URLs</h3>
               <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Dual Mode
+                Whole site or a URL list
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Broken links (4xx/5xx), 2+ hop redirect chains, redirect loops, double slashes, placeholder
-              hrefs, broken in-page anchors, empty anchor text and tracking parameter pollution.
+              Finds pages that return an error, redirect too many times, link to “#” placeholders, point at
+              missing sections, have no link text, or carry tracking parameters.
             </p>
           </div>
         </div>
@@ -792,16 +792,28 @@ export const LinkHealthValidation: React.FC<LinkHealthValidationProps> = ({
 
                         <td className="py-3 px-4 max-w-sm">
                           <div className="space-y-1">
-                            <span
-                              className="font-mono text-[11px] text-slate-800 block truncate"
-                              title={item.targetUrl}
+                            <a
+                              href={item.targetUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-[11px] text-slate-800 block truncate hover:text-emerald-700 hover:underline"
+                              title={`Open in new tab: ${item.targetUrl}`}
                             >
                               {item.targetUrl}
-                            </span>
+                            </a>
                             {item.finalDestinationUrl && item.finalDestinationUrl !== item.targetUrl && (
                               <span className="text-[10px] text-slate-500 flex items-center space-x-1">
                                 <CornerDownRight className="h-2.5 w-2.5 text-amber-600 shrink-0" />
-                                <span className="truncate">Final: {item.finalDestinationUrl}</span>
+                                <span className="shrink-0">Final:</span>
+                                <a
+                                  href={item.finalDestinationUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="truncate hover:text-emerald-700 hover:underline"
+                                  title={`Open in new tab: ${item.finalDestinationUrl}`}
+                                >
+                                  {item.finalDestinationUrl}
+                                </a>
                               </span>
                             )}
                             {item.details && (
@@ -908,16 +920,28 @@ export const LinkHealthValidation: React.FC<LinkHealthValidationProps> = ({
             <div className="space-y-3 text-xs">
               <div>
                 <span className="font-semibold text-slate-700 block mb-0.5">Source Page:</span>
-                <span className="font-mono text-slate-800 bg-slate-50 p-2 rounded-lg block break-all">
+                <a
+                  href={inspectModalItem.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-slate-800 bg-slate-50 p-2 rounded-lg block break-all hover:text-emerald-700 hover:underline"
+                  title="Open source page in new tab"
+                >
                   {inspectModalItem.sourceUrl}
-                </span>
+                </a>
               </div>
 
               <div>
                 <span className="font-semibold text-slate-700 block mb-0.5">Destination URL:</span>
-                <span className="font-mono text-slate-800 bg-slate-50 p-2 rounded-lg block break-all">
+                <a
+                  href={inspectModalItem.targetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-slate-800 bg-slate-50 p-2 rounded-lg block break-all hover:text-emerald-700 hover:underline"
+                  title="Open destination in new tab"
+                >
                   {inspectModalItem.targetUrl}
-                </span>
+                </a>
               </div>
 
               {inspectModalItem.domElementSnippet && (

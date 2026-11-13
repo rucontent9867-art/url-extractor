@@ -665,7 +665,15 @@ export const AssetValidation: React.FC<AssetValidationProps> = ({
                         </td>
 
                         <td className="py-3 px-4 max-w-xs font-mono text-[11px] text-slate-800" title={item.url}>
-                          <div className="truncate">{item.url}</div>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate block hover:text-emerald-700 hover:underline"
+                            title={`Open in new tab: ${item.url}`}
+                          >
+                            {item.url}
+                          </a>
                           {(item.cdnProvider || item.isMixedContent) && (
                             <div className="flex items-center gap-1.5 mt-1">
                               {item.cdnProvider && (

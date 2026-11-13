@@ -342,8 +342,16 @@ export const VisualValidation: React.FC<VisualValidationProps> = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-4 max-w-xs font-mono text-[11px] text-slate-800 truncate" title={item.pageUrl}>
-                        {item.pageUrl}
+                      <td className="py-3 px-4 max-w-xs font-mono text-[11px] text-slate-800 truncate">
+                        <a
+                          href={item.pageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-emerald-700 hover:underline"
+                          title={`Open in new tab: ${item.pageUrl}`}
+                        >
+                          {item.pageUrl}
+                        </a>
                       </td>
 
                       <td className="py-3 px-4">

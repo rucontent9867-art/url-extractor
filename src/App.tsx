@@ -62,6 +62,10 @@ export default function App() {
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [targetValidationTab, setTargetValidationTab] = useState<string | undefined>(undefined);
   const [isExcludedAssetsModalOpen, setIsExcludedAssetsModalOpen] = useState(false);
+  const [pagesView, setPagesView] = useState<'list' | 'languages'>('list');
+  const [pendingQuickUrl, setPendingQuickUrl] = useState<string | null>(null);
+  const [quickAuditPending, setQuickAuditPending] = useState(false);
+  const [autoRunKey, setAutoRunKey] = useState(0);
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -226,6 +230,42 @@ export default function App() {
     }
   };
 
+  // One-click audit: normalise what the user typed, then start a domain crawl.
+  const handleQuickAudit = (rawUrl: string) => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return;
+    const normalized = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+    setErrorMessage('');
+    setCrawlMode('domain');
+    setUrlInput(normalized);
+    // Keep the one-click audit fast: cap very large crawls so feedback arrives in seconds.
+    setSettings((prev) => ({ ...prev, maxPages: Math.min(prev.maxPages, 100) }));
+    setQuickAuditPending(true);
+    setPendingQuickUrl(normalized);
+  };
+
+  // Start the crawl once the quick-audit state has been applied.
+  useEffect(() => {
+    if (!pendingQuickUrl) return;
+    if (urlInput !== pendingQuickUrl || crawlMode !== 'domain') return;
+
+    setPendingQuickUrl(null);
+    handleStartCrawl();
+  }, [pendingQuickUrl, urlInput, crawlMode]);
+
+  // When that crawl finishes, jump straight to the results and run every check.
+  useEffect(() => {
+    if (!quickAuditPending) return;
+    if (stats.status === 'completed' || stats.status === 'stopped') {
+      setQuickAuditPending(false);
+      setAutoRunKey((key) => key + 1);
+      setActiveNavTab('validation');
+    } else if (stats.status === 'error') {
+      setQuickAuditPending(false);
+    }
+  }, [stats.status, quickAuditPending]);
+
   const handleStopCrawl = async () => {
     if (!activeCrawlId) return;
 
@@ -253,7 +293,7 @@ export default function App() {
         setStats(data.stats);
         setItems(data.items);
         setIsDemoMode(true);
-        setLiveMessage('Sample dataset loaded! You can now explore all 12 tools.');
+        setLiveMessage('Sample data loaded — open Results to see what an audit looks like.');
       }
     } catch (err: any) {
       console.error('Failed to load demo data:', err);
@@ -325,6 +365,7 @@ export default function App() {
         {/* TAB 0: ALL TOOLS HUB */}
         {activeNavTab === 'tools_hub' && (
           <ToolsHub
+            onStartAudit={handleQuickAudit}
             onSelectNavTab={setActiveNavTab}
             onOpenValidationTool={(tab) => {
               setTargetValidationTab(tab);
@@ -335,6 +376,8 @@ export default function App() {
             hasActiveData={items.length > 0}
             activeDomain={stats.domain}
             totalUrlsCount={items.length}
+            isBusy={isCrawling || quickAuditPending}
+            errorMessage={errorMessage}
           />
         )}
 
@@ -348,8 +391,8 @@ export default function App() {
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div className="text-xs">
-                  <span className="font-bold text-slate-900 block">Want to inspect all 12 tools before running a crawl?</span>
-                  <span className="text-slate-500">Explore link & URL health, sitemaps, translation completeness matrix, AMP mobile parity, and responsive layout audits.</span>
+                  <span className="font-bold text-slate-900 block">Need specific pages only? Paste a URL list or tune the crawl limits.</span>
+                  <span className="text-slate-500">The one-click audit on the Start screen uses these same options with sensible defaults.</span>
                 </div>
               </div>
               <div className="flex items-center space-x-2 shrink-0">
@@ -359,7 +402,7 @@ export default function App() {
                   className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
                 >
                   <LayoutGrid className="h-3.5 w-3.5 text-slate-600" />
-                  <span>View All Tools</span>
+                  <span>Back to Start</span>
                 </button>
                 <button
                   type="button"
@@ -509,10 +552,71 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: URLS RESULTS TABLE */}
+        {/* TAB: PAGES — one place for the page list and the language breakdown */}
         {activeNavTab === 'urls' && (
           <div className="space-y-6">
-            {items.length > 0 ? (
+            <div className="inline-flex p-1 bg-slate-200/60 rounded-xl gap-1">
+              <button
+                type="button"
+                onClick={() => setPagesView('list')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  pagesView === 'list' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All pages
+              </button>
+              <button
+                type="button"
+                onClick={() => setPagesView('languages')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                  pagesView === 'languages' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                By language
+              </button>
+            </div>
+
+            {pagesView === 'languages' ? (
+              items.length > 0 ? (
+                <LanguagesDashboard
+                  items={items}
+                  stats={stats}
+                  onSelectLanguage={(langCode) => {
+                    setSelectedLanguage(langCode);
+                    setPagesView('list');
+                  }}
+                />
+              ) : (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs">
+                  <div className="max-w-md mx-auto space-y-3">
+                    <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-500">
+                      <Layers className="h-6 w-6" />
+                    </div>
+                    <h3 className="text-base font-bold text-slate-900">No languages to show yet</h3>
+                    <p className="text-xs text-slate-500">
+                      Run an audit or load the sample data to see which languages the site serves.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleLoadDemo}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>Load sample data</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveNavTab('tools_hub')}
+                        className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+                      >
+                        Start an audit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            ) : items.length > 0 ? (
               <>
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
                   <LanguageFilter
@@ -535,88 +639,25 @@ export default function App() {
                   <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-500">
                     <ListOrdered className="h-6 w-6" />
                   </div>
-                  <h3 className="text-base font-bold text-slate-900">No Discovered URLs Yet</h3>
+                  <h3 className="text-base font-bold text-slate-900">No pages found yet</h3>
                   <p className="text-xs text-slate-500">
-                    Start a crawl in the Crawler tab to extract and index all valid internal webpage URLs, or explore immediately with sample data.
+                    Run an audit from the Start screen and every page we find will be listed here.
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveNavTab('tools_hub')}
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+                    >
+                      Start an audit
+                    </button>
                     <button
                       type="button"
                       onClick={handleLoadDemo}
                       className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
                     >
                       <Zap className="h-3.5 w-3.5" />
-                      <span>Load Sample URLs</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveNavTab('tools_hub')}
-                      className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 inline-flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <LayoutGrid className="h-3.5 w-3.5" />
-                      <span>See All Tools</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveNavTab('crawler')}
-                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <Compass className="h-3.5 w-3.5" />
-                      <span>Go to Crawler</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 3: LANGUAGES DASHBOARD */}
-        {activeNavTab === 'languages' && (
-          <div className="space-y-6">
-            {items.length > 0 ? (
-              <LanguagesDashboard
-                items={items}
-                stats={stats}
-                onSelectLanguage={(langCode) => {
-                  setSelectedLanguage(langCode);
-                  setActiveNavTab('urls');
-                }}
-              />
-            ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
-                <div className="max-w-md mx-auto space-y-3">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-500">
-                    <Layers className="h-6 w-6" />
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900">No Language Data Available</h3>
-                  <p className="text-xs text-slate-500">
-                    Perform a crawl to view the breakdown of detected languages, locale percentages, and targeted exports, or load demo data.
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleLoadDemo}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-500 inline-flex items-center space-x-1.5 cursor-pointer shadow-xs"
-                    >
-                      <Zap className="h-3.5 w-3.5" />
-                      <span>Load Sample Languages</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveNavTab('tools_hub')}
-                      className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 inline-flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <LayoutGrid className="h-3.5 w-3.5" />
-                      <span>See All Tools</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveNavTab('crawler')}
-                      className="px-3.5 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 inline-flex items-center space-x-1.5 cursor-pointer"
-                    >
-                      <Compass className="h-3.5 w-3.5" />
-                      <span>Go to Crawler</span>
+                      <span>Load sample data</span>
                     </button>
                   </div>
                 </div>
@@ -635,6 +676,7 @@ export default function App() {
               onLoadDemoData={handleLoadDemo}
               onSelectNavTab={setActiveNavTab}
               initialTab={targetValidationTab}
+              autoRunKey={autoRunKey}
             />
           </div>
         )}
@@ -642,7 +684,7 @@ export default function App() {
 
       <footer className="border-t border-slate-200 bg-white py-4 mt-12 text-center text-xs text-slate-400">
         <p>
-          Domain URL Crawler & SEO/Localization Validator • Reusable dataset • Canonical path alignment • Text language verification
+          Website Audit · crawl any site · 13 checks · prioritised fix list
         </p>
       </footer>
 
